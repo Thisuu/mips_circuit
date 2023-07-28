@@ -5,9 +5,6 @@ members = [
     "",
 
     # Libraries
-    "core/lib/circuit"
+    "core/lib/circuit",
+    "core/lib/storage",
 ]
-
-[profile.release.package.flamegraph_target]
-# We need both performance and debug info to analyze.
-debug = true
