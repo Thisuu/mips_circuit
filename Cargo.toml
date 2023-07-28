@@ -1,7 +1,13 @@
 [workspace]
 resolver = "2"
 members = [
+    # Binaries
+    "",
+
+    # Libraries
+    "core/lib/circuit"
 ]
 
-[profile.dev]
-opt-level = 1
+[profile.release.package.flamegraph_target]
+# We need both performance and debug info to analyze.
+debug = true

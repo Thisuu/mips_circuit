@@ -1,0 +1,16 @@
+[package]
+name = "mips_circuit"
+version = "1.0.0"
+edition = "2018"
+authors = ["The ZKM Team"]
+homepage = "https://zkm.io/"
+repository = "https://github.com/zkMIPS/mips_circuit"
+license = "Apache-2.0"
+keywords = ["blockchain", "zkm"]
+categories = ["cryptography"]
+
+[features]
+default = []
+playground = []
+
+[dependencies]
