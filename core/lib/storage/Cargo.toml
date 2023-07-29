@@ -17,6 +17,7 @@ db_test = []
 
 utils = { path = "../utils", version = "1.0" }
 types = { path = "../types", version = "1.0" }
+utils_macro_driver = {path = "../utils_macro_driver", version= "0.1.0"}
 
 serde = "1.0.130"
 serde_json = "1.0.72"

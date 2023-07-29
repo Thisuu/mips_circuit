@@ -13,6 +13,8 @@ use types::{ActionType, BlockNumber};
 
 pub mod chain;
 pub mod connection;
+pub mod prover;
+pub mod database_interface;
 
 pub use crate::connection::ConnectionPool;
 pub use sqlx::types::BigDecimal;
