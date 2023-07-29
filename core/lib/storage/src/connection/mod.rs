@@ -9,7 +9,7 @@ use tokio::time;
 // Local imports
 // use self::recoverable_connection::RecoverableConnection;
 use crate::{get_database_replica_url, get_database_url, StorageProcessor};
-use zksync_utils::parse_env;
+use utils::parse_env;
 
 pub mod holder;
 

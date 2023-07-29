@@ -15,6 +15,9 @@ db_test = []
 
 [dependencies]
 
+utils = { path = "../utils", version = "1.0" }
+types = { path = "../types", version = "1.0" }
+
 serde = "1.0.130"
 serde_json = "1.0.72"
 num = { version = "0.3.1", features = ["serde"] }
