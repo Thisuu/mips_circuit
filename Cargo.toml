@@ -10,4 +10,5 @@ members = [
     "core/lib/vlog",
     "core/lib/utils",
     "core/lib/basic_types",
+    "core/lib/utils_macro_driver",
 ]
