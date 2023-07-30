@@ -1,10 +1,27 @@
 [workspace]
 resolver = "2"
 members = [
-    # Binaries
-    "",
-
-    # Libraries
+    "zokrates_common",
+    "zokrates_core",
+    "zokrates_cli",
+    "zokrates_fs_resolver",
+    "zokrates_stdlib",
+    "zokrates_codegen",
+    "zokrates_analysis",
+    "zokrates_embed",
+    "zokrates_abi",
+    "zokrates_test",
+    "zokrates_core_test",
+    "zokrates_ark",
+    "zokrates_ast",
+    "zokrates_interpreter",
+    "zokrates_embed",
+    "zokrates_bellman",
+    "zokrates_bellperson",
+    "zokrates_proof_systems",
+    "zokrates_js",
+    "zokrates_circom",
+    "zokrates_profiler",
     "core/lib/circuit",
     "core/lib/storage",
     "core/lib/vlog",
@@ -12,3 +29,6 @@ members = [
     "core/lib/basic_types",
     "core/lib/utils_macro_driver",
 ]
+
+[profile.dev]
+opt-level = 1

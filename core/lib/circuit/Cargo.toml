@@ -14,3 +14,8 @@ default = []
 playground = []
 
 [dependencies]
+zokrates_ast = { version = "0.1", path = "../../../zokrates_ast", default-features = false }
+zokrates_field = { version = "0.5", path = "../../../zokrates_field", features = ["multicore"] }
+
+types = { path = "../types", version = "1.0" }
+vlog = { path = "../vlog", version = "1.0" }
