@@ -24,35 +24,11 @@ pub struct NewProof {
 }
 
 #[derive(Debug, FromRow)]
-pub struct StoredProof {
-    pub block_number: i64,
-    pub proof: serde_json::Value,
-    pub created_at: DateTime<Utc>,
-}
-
-#[derive(Debug, FromRow)]
-pub struct AptStoredProof {
-    pub f_id: i64,
-    pub f_block_number: i64,
-    pub f_proof: serde_json::Value,
-    pub f_created_at: DateTime<Utc>,
-}
-
-#[derive(Debug, FromRow)]
 pub struct StoredAggregatedProof {
     pub first_block: i64,
     pub last_block: i64,
     pub proof: serde_json::Value,
     pub created_at: DateTime<Utc>,
-}
-
-#[derive(Debug, FromRow)]
-pub struct AptStoredAggregatedProof {
-    pub f_id: i64,
-    pub f_first_block: i64,
-    pub f_last_block: i64,
-    pub f_proof: serde_json::Value,
-    pub f_created_at: DateTime<Utc>,
 }
 
 // Every time before a prover worker starts generating the proof, a prover run is recorded for monitoring purposes
@@ -97,4 +73,13 @@ pub struct StorageBlockWitnessCloud {
     pub f_version: i64,
     pub f_object_key: String,
     pub f_object_witness: String,
+}
+
+#[derive(Debug, FromRow, Serialize, Deserialize, UtilsMacro)]
+pub struct StoredProof {
+    pub f_id: i64,
+    pub f_block_number: i64,
+    pub f_proof: serde_json::Value,
+    pub f_created_at: DateTime<Utc>,
+
 }
