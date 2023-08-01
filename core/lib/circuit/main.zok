@@ -1,0 +1,86 @@
+struct mem_access {
+	field addr;
+	field value;
+	bool is_write; 
+}
+
+struct trace_record {
+	field cycle;
+	field opcode;
+	field pc;
+	field[32] regs;
+	field hi;
+	field lo;
+	mem_access mem;
+	bool start;
+	bool finish;
+}
+
+struct MipsStates<N> {
+	trace_record cur;
+	field[N] memory;
+}
+
+def verify_initial_state(trace_record record, field start_pc) -> field {
+	assert(record.cycle == 0);
+	assert(record.opcode == 0);
+	assert(record.pc == start_pc);
+	assert(record.regs == [0;32]);
+	assert(record.hi == 0);
+	assert(record.lo == 0);
+	assert(record.mem == mem_access {addr: 0, value: 0, is_write: false});
+	assert(record.start == true);
+	assert(record.finish == false);
+	return 0;
+}
+
+def check_instruction<N>(MipsStates<N> mut states, trace_record nextStates) -> MipsStates<N> {
+
+	assert(states.cur.pc < 1 << N );
+/*
+	field mut inst = 0;
+	inst = states.memory[states.cur.pc];
+	assert(inst == nextStates.opcode);
+*/
+	// TODO: decode instruction, update MipsStates and do check on the instruction function
+	
+	states.cur.cycle = states.cur.cycle + 1;
+	assert(states.cur == nextStates);
+	return states;
+}
+
+def do_check<recordSize, memSize>(
+	trace_record[recordSize] mut trace, 
+	field[memSize] mut mem_image,
+	field start_pc,
+	field[memSize] final_mem_image) -> field {
+	
+	field mut ret = 0;
+	// check initial trace
+	MipsStates<memSize> mut states = MipsStates{
+		cur: trace[0],
+		memory: mem_image
+	};
+
+	ret = verify_initial_state(states.cur, start_pc);
+	states.cur.start = false;
+
+	// check every instruction trace 
+	for u32 i in 1..recordSize {
+		states = check_instruction(states, trace[i]);
+	}
+
+	// check final memory image
+	assert(states.memory == final_mem_image);
+
+	return 0;
+}
+
+def main(private trace_record[1] mut trace, 
+	field[4] mut mem_image,
+	field start_pc, field[4] final_mem_image) -> field {
+        
+	return do_check(trace, mem_image, start_pc, mem_image);
+}
+
+// example input: 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0

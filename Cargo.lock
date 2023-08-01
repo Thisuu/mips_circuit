@@ -2779,10 +2779,13 @@ dependencies = [
 name = "mips_circuit"
 version = "1.0.0"
 dependencies = [
+ "serde_json",
  "types",
  "vlog",
+ "zokrates_abi",
  "zokrates_ast",
  "zokrates_field",
+ "zokrates_interpreter",
 ]
 
 [[package]]

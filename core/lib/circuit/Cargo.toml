@@ -16,6 +16,9 @@ playground = []
 [dependencies]
 zokrates_ast = { version = "0.1", path = "../../../zokrates_ast", default-features = false }
 zokrates_field = { version = "0.5", path = "../../../zokrates_field", features = ["multicore"] }
+zokrates_abi = { version = "0.1", path = "../../../zokrates_abi" }
+zokrates_interpreter = { version = "0.1", path = "../../../zokrates_interpreter", default-features = false }
+serde_json = { version = "1.0", features = ["preserve_order"] }
 
 types = { path = "../types", version = "1.0" }
 vlog = { path = "../vlog", version = "1.0" }
