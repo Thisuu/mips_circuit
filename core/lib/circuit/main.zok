@@ -60,6 +60,93 @@ def handleJump<N>(MipsStates<N> mut states, u32 link, u32 dest) -> MipsStates<N>
 	};
 }
 
+def SE(u32 dat, u32 index) -> u32 {
+	bool isSigned = (dat >> (index - 1)) != 0;
+	u32 signed = ((1 << (32 - index)) - 1) << index;
+	u32 mask = (1 << index) - 1;
+	return if isSigned {
+		dat & mask | signed
+	} else {
+		dat & mask
+	};
+}
+
+def handleBranch<N>(MipsStates<N> mut states, u32 opcode, u32 insn, u32 rtReg, u32 rs) -> MipsStates<N> {
+	bool mut shouldBranch = false;
+	u32 rtv = (insn >> 16) & 0x0000001F;
+	u32 rt = states.cur.regs[rtReg];
+	shouldBranch = 	if opcode == 4 || opcode == 5 { // beq/bne
+		(rs ==rt && opcode == 4) || (rs != rt && opcode == 5)
+	} else {
+		if opcode == 6 {
+			rs >= 0x80000000 || rs == 0 // blez
+		} else {
+			if opcode == 7 {
+				rs < 0x80000000 && rs != 0 // bgtz
+			} else {
+				if opcode == 1 {
+
+					if rtv == 0 { // bltz
+						rs > 0x80000000
+					} else {
+						if rtv == 1 { // bgez
+							rs <= 0x80000000
+						} else {
+							false
+						}
+					}
+				} else {
+					false
+				}
+			}
+		}
+	};
+
+	u32 prevPC = states.cur.pc;
+	states.cur.pc = states.cur.nextPC;
+	states.cur.nextPC = if shouldBranch {
+		prevPC + 4 + (SE(insn & 0x0000FFFF, 16) << 2)
+	} else {
+		states.cur.pc + 4
+	};
+
+	return states;
+}
+
+def handleRItypeInsts<N>(MipsStates<N> mut states, u32 insn, u32 opcode) -> MipsStates<N> {
+	u32 mut rs = 0;
+	u32 mut rt = 0;
+	u32 mut rtReg = (insn >> 16) & 0x0000001F;
+	u32 mut rdReg = 0;
+
+	rs = states.cur.regs[(insn >> 21) & 0x0000001F];
+	rdReg = opcode == 0 || opcode == 0x0000001C ? (insn >> 11) & 0x0000001F : rtReg;
+
+	rt = if opcode == 0 || opcode == 0x0000001C {
+		states.cur.regs[rtReg]
+	} else {
+		if opcode < 0x00000020 {
+			if opcode == 0x0000000C || opcode == 0x0000000D || opcode == 0x0000000E {
+				insn & 0x0000FFFF
+			} else {
+				SE(insn & 0x0000FFFF, 16)
+			}
+		} else {
+			if opcode >= 0x00000028 || opcode == 0x00000022 || opcode == 0x00000026 {
+				states.cur.regs[rtReg]
+			} else {
+				0
+			}
+		}
+	};
+
+	return if (opcode >= 4 && opcode <= 8) || opcode == 1 {
+		handleBranch(states, opcode, insn, rtReg, rs)
+	} else {
+		states
+	};
+}
+
 def execute<N>(MipsStates<N> mut states) -> MipsStates<N> {
 	u32 mut inst = 0;
 	inst = states.memory[states.cur.pc];
@@ -67,13 +154,11 @@ def execute<N>(MipsStates<N> mut states) -> MipsStates<N> {
 
 	u32 opcode = inst >> 26;
 
-	states = if opcode == 2 || opcode == 3 {
+	return if opcode == 2 || opcode == 3 {
 		handleJump(states, opcode == 2 ? 0 : 31, (opcode & 0x03FFFFFF) << 2)
 	} else {
-		states
+		handleRItypeInsts(states, inst, opcode)
 	};
-
-	return states;
 }
 
 def check_instruction<N>(MipsStates<N> mut states, trace_record nextStates) -> MipsStates<N> {
