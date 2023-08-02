@@ -1,16 +1,16 @@
 struct mem_access {
-	field addr;
-	field value;
+	u32 addr;
+	u32 value;
 	bool is_write; 
 }
 
 struct trace_record {
-	field cycle;
-	field opcode;
-	field pc;
-	field[32] regs;
-	field hi;
-	field lo;
+	u32 cycle;
+	u32 opcode;
+	u32 pc;
+	u32[32] regs;
+	u32 hi;
+	u32 lo;
 	mem_access mem;
 	bool start;
 	bool finish;
@@ -18,10 +18,10 @@ struct trace_record {
 
 struct MipsStates<N> {
 	trace_record cur;
-	field[N] memory;
+	u32[N] memory;
 }
 
-def verify_initial_state(trace_record record, field start_pc) -> field {
+def verify_initial_state(trace_record record, u32 start_pc) -> u32 {
 	assert(record.cycle == 0);
 	assert(record.opcode == 0);
 	assert(record.pc == start_pc);
@@ -36,12 +36,11 @@ def verify_initial_state(trace_record record, field start_pc) -> field {
 
 def check_instruction<N>(MipsStates<N> mut states, trace_record nextStates) -> MipsStates<N> {
 
-	assert(states.cur.pc < 1 << N );
-/*
-	field mut inst = 0;
+	assert(states.cur.pc < N);
+	u32 mut inst = 0;
 	inst = states.memory[states.cur.pc];
 	assert(inst == nextStates.opcode);
-*/
+
 	// TODO: decode instruction, update MipsStates and do check on the instruction function
 	
 	states.cur.cycle = states.cur.cycle + 1;
@@ -51,11 +50,11 @@ def check_instruction<N>(MipsStates<N> mut states, trace_record nextStates) -> M
 
 def do_check<recordSize, memSize>(
 	trace_record[recordSize] mut trace, 
-	field[memSize] mut mem_image,
-	field start_pc,
-	field[memSize] final_mem_image) -> field {
+	u32[memSize] mut mem_image,
+	u32 start_pc,
+	u32[memSize] final_mem_image) -> u32 {
 	
-	field mut ret = 0;
+	u32 mut ret = 0;
 	// check initial trace
 	MipsStates<memSize> mut states = MipsStates{
 		cur: trace[0],
@@ -77,8 +76,8 @@ def do_check<recordSize, memSize>(
 }
 
 def main(private trace_record[1] mut trace, 
-	field[4] mut mem_image,
-	field start_pc, field[4] final_mem_image) -> field {
+	u32[4] mut mem_image,
+	u32 start_pc, u32[4] final_mem_image) -> u32 {
         
 	return do_check(trace, mem_image, start_pc, mem_image);
 }
