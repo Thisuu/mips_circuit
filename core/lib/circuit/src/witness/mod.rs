@@ -1,12 +1,13 @@
 // Built-in deps
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufReader, Read, stdin};
+use std::io::{BufReader, BufWriter, Read, stdin};
 use std::path::Path;
+use zokrates_abi::Encode;
 use zokrates_ast::ir;
 // Workspace imports
 use types::{BlockNumber};
-use zokrates_ast::ir::{ProgEnum, Statement};
+use zokrates_ast::ir::{ProgEnum};
 use zokrates_ast::typed::{ConcreteSignature, ConcreteType};
 use zokrates_ast::typed::abi::Abi;
 use zokrates_ast::typed::types::GTupleType;
@@ -14,25 +15,26 @@ use zokrates_field::Field;
 // External imports
 use serde_json::from_reader;
 
-pub fn compute_witness(compiled_circuit_path: String, args: &HashMap<String, String>, block_number: BlockNumber) -> Result<(), String> {
+pub fn compute_witness(args: &HashMap<String, String>, block_number: BlockNumber) -> Result<(), String> {
     let path = Path::new(args.get(&"input".to_string()).unwrap());
     let file = File::open(path).map_err(|why| format!("Could not open {}: {}", path.display(), why))?;
 
     let mut reader = BufReader::new(file);
 
     match ProgEnum::deserialize(&mut reader)? {
-        ProgEnum::Bls12_381Program(p) => compute(p, args),
-        ProgEnum::Bn128Program(p) => compute(p, args),
-        ProgEnum::Bls12_377Program(p) => compute(p, args),
-        ProgEnum::Bw6_761Program(p) => compute(p, args),
-        ProgEnum::PallasProgram(p) => compute(p, args),
-        ProgEnum::VestaProgram(p) => compute(p, args),
+        ProgEnum::Bls12_381Program(p) => compute(p, args, block_number),
+        ProgEnum::Bn128Program(p) => compute(p, args, block_number),
+        ProgEnum::Bls12_377Program(p) => compute(p, args, block_number),
+        ProgEnum::Bw6_761Program(p) => compute(p, args, block_number),
+        ProgEnum::PallasProgram(p) => compute(p, args, block_number),
+        ProgEnum::VestaProgram(p) => compute(p, args, block_number),
     }
 }
 
 fn compute<'a, T: Field, I: Iterator<Item=ir::Statement<'a, T>>>(
     ir_prog: ir::ProgIterator<'a, T, I>,
     args: &HashMap<String, String>,
+    block_number: BlockNumber,
 ) -> Result<(), String> {
     vlog::warn!("Computing witness...");
 
@@ -108,29 +110,35 @@ fn compute<'a, T: Field, I: Iterator<Item=ir::Statement<'a, T>>>(
     }
     .map_err(|e| format!("Could not parse argument: {}", e))?;
 
-    // let interpreter = zokrates_interpreter::Interpreter::default();
-    // let public_inputs = ir_prog.public_inputs();
-    //
-    // let witness = interpreter
-    //     .execute_with_log_stream(
-    //         &arguments.encode(),
-    //         ir_prog.statements,
-    //         &ir_prog.arguments,
-    //         &ir_prog.solvers,
-    //         &mut std::io::stdout(),
-    //     )
-    //     .map_err(|e| format!("Execution failed: {}", e))?;
-    //
-    // use zokrates_abi::Decode;
-    //
-    // let results_json_value: serde_json::Value =
-    //     zokrates_abi::Value::decode(witness.return_values(), *signature.output).into_serde_json();
-    //
-    // if verbose {
-    //     println!("\nWitness: \n{}\n", results_json_value);
-    // }
+    let interpreter = zokrates_interpreter::Interpreter::default();
+    let public_inputs = ir_prog.public_inputs();
 
+    let witness = interpreter
+        .execute_with_log_stream(
+            &arguments.encode(),
+            ir_prog.statements,
+            &ir_prog.arguments,
+            &ir_prog.solvers,
+            &mut std::io::stdout(),
+        )
+        .map_err(|e| format!("Execution failed: {}", e))?;
 
+    use zokrates_abi::Decode;
+
+    let results_json_value: serde_json::Value =
+        zokrates_abi::Value::decode(witness.return_values(), *signature.output).into_serde_json();
+
+    if verbose {
+        println!("\nWitness: \n{}\n", results_json_value);
+    }
+
+    let mut witness_str = String::new();
+
+    let mut buff = BufWriter::new(Vec::new());
+    witness.write(&mut buff).map_err(|e| format!("Serialize witness failed: {}", e))?;
+    let bytes = buff.into_inner().map_err(|e| format!("get witness buff failed: {}", e))?;
+    let witness_str = String::from_utf8(bytes).map_err(|e| format!("get witness_str failed: {}", e))?;
+    println!("\nWitness: \n{}\n", witness_str);
 
     Ok(())
 }

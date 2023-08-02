@@ -2779,13 +2779,31 @@ dependencies = [
 name = "mips_circuit"
 version = "1.0.0"
 dependencies = [
+ "assert_cli",
+ "ethabi 17.2.0",
+ "fs_extra",
+ "glob 0.2.11",
+ "pretty_assertions 1.3.0",
+ "primitive-types 0.11.1",
  "serde_json",
+ "tempdir",
+ "typed-arena",
  "types",
  "vlog",
  "zokrates_abi",
+ "zokrates_ark",
  "zokrates_ast",
+ "zokrates_bellman",
+ "zokrates_bellperson",
+ "zokrates_circom",
+ "zokrates_common",
+ "zokrates_core",
+ "zokrates_embed",
  "zokrates_field",
+ "zokrates_fs_resolver",
  "zokrates_interpreter",
+ "zokrates_profiler",
+ "zokrates_proof_systems",
 ]
 
 [[package]]
