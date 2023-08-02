@@ -42,14 +42,45 @@ def verify_initial_state(trace_record record, u32 start_pc) -> u32 {
 	return 0;
 }
 
-def check_instruction<N>(MipsStates<N> mut states, trace_record nextStates) -> MipsStates<N> {
+def updateReg<N>(MipsStates<N> mut states, u32 reg, u32 value) -> MipsStates<N> {
+	assert(reg != 0);
+	assert(reg <= 31);
+	states.cur.regs[reg] = value;
+	return states;
+}
 
-	assert(states.cur.pc < N);
+def handleJump<N>(MipsStates<N> mut states, u32 link, u32 dest) -> MipsStates<N> {
+	u32 prevPC = states.cur.pc;
+	states.cur.pc = states.cur.nextPC;
+	states.cur.nextPC = dest;
+	return if link == 0 {
+		states
+	} else {
+		updateReg(states, link, prevPC + 8)
+	};
+}
+
+def execute<N>(MipsStates<N> mut states) -> MipsStates<N> {
 	u32 mut inst = 0;
 	inst = states.memory[states.cur.pc];
 //  assert(inst == nextStates.opcode);
 
-	// TODO: decode instruction, update MipsStates and do check on the instruction function
+	u32 opcode = inst >> 26;
+
+	states = if opcode == 2 || opcode == 3 {
+		handleJump(states, opcode == 2 ? 0 : 31, (opcode & 0x03FFFFFF) << 2)
+	} else {
+		states
+	};
+
+	return states;
+}
+
+def check_instruction<N>(MipsStates<N> mut states, trace_record nextStates) -> MipsStates<N> {
+
+	assert(states.cur.pc < N);
+
+	states = execute(states);
 	
 	states.cur.cycle = states.cur.cycle + 1;
 	assert(states.cur == nextStates);
