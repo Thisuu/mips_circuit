@@ -1,19 +1,20 @@
-struct mem_access {
-	u32 addr;
-	u32 value;
-	bool is_write; 
-}
-
 struct trace_record {
 	u32 cycle;
-	u32 opcode;
 	u32 pc;
-	u32[32] regs;
-	u32 hi;
+	u32 nextPC;
 	u32 lo;
-	mem_access mem;
-	bool start;
-	bool finish;
+	u32 hi;
+	u32[32] regs;
+	u32[32] preImageKey;
+	u32 preImageOffset;
+	u32 heap;
+	u8 exitCode;
+	bool exited;
+//	u32 opcode;
+//	u32 addr;
+//	u32 memValue;
+//	bool isWrite;
+//	bool start;
 }
 
 struct MipsStates<N> {
@@ -23,14 +24,21 @@ struct MipsStates<N> {
 
 def verify_initial_state(trace_record record, u32 start_pc) -> u32 {
 	assert(record.cycle == 0);
-	assert(record.opcode == 0);
+	assert(record.nextPC == start_pc + 4);
 	assert(record.pc == start_pc);
-	assert(record.regs == [0;32]);
-	assert(record.hi == 0);
 	assert(record.lo == 0);
-	assert(record.mem == mem_access {addr: 0, value: 0, is_write: false});
-	assert(record.start == true);
-	assert(record.finish == false);
+	assert(record.hi == 0);
+	assert(record.regs == [0;32]);
+	assert(record.preImageKey == [0;32]);
+	assert(record.heap == 0x20000000);
+	assert(record.exitCode == 0);
+	assert(record.exited == false);
+//	assert(record.addr == 0);
+//	assert(record.opcode == 0);
+//	assert(record.memValue == 0);
+//	assert(record.isWrite == 0);
+//	assert(record.start == true);
+
 	return 0;
 }
 
@@ -39,7 +47,7 @@ def check_instruction<N>(MipsStates<N> mut states, trace_record nextStates) -> M
 	assert(states.cur.pc < N);
 	u32 mut inst = 0;
 	inst = states.memory[states.cur.pc];
-	assert(inst == nextStates.opcode);
+//  assert(inst == nextStates.opcode);
 
 	// TODO: decode instruction, update MipsStates and do check on the instruction function
 	
@@ -62,7 +70,7 @@ def do_check<recordSize, memSize>(
 	};
 
 	ret = verify_initial_state(states.cur, start_pc);
-	states.cur.start = false;
+//	states.cur.start = false;
 
 	// check every instruction trace 
 	for u32 i in 1..recordSize {
