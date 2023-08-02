@@ -92,11 +92,11 @@ def handleBranch<N>(MipsStates<N> mut states, u32 opcode, u32 insn, u32 rtReg, u
 						if rtv == 1 { // bgez
 							rs <= 0x80000000
 						} else {
-							false
+							shouldBranch
 						}
 					}
 				} else {
-					false
+					shouldBranch
 				}
 			}
 		}
@@ -135,7 +135,7 @@ def handleRItypeInsts<N>(MipsStates<N> mut states, u32 insn, u32 opcode) -> Mips
 			if opcode >= 0x00000028 || opcode == 0x00000022 || opcode == 0x00000026 {
 				states.cur.regs[rtReg]
 			} else {
-				0
+				rt
 			}
 		}
 	};
