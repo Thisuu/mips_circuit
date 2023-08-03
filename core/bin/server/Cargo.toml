@@ -11,4 +11,4 @@ categories = ["cryptography"]
 publish = false # We don't want to publish our binaries.
 
 [dependencies]
-
+witness_generator = { path = "../witness_generator", version = "1.0" }

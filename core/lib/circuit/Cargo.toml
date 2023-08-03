@@ -1,5 +1,5 @@
 [package]
-name = "mips_circuit"
+name = "circuit"
 version = "1.0.0"
 edition = "2018"
 authors = ["The ZKM Team"]
