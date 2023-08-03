@@ -1,5 +1,5 @@
 [package]
-name = "mips_storage"
+name = "storage"
 version = "1.0.0"
 edition = "2018"
 authors = ["The ZKM Team"]

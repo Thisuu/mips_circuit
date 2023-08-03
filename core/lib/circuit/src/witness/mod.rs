@@ -15,27 +15,26 @@ use zokrates_field::Field;
 // External imports
 use serde_json::from_reader;
 
-pub fn compute_witness(args: &HashMap<String, String>, block_number: BlockNumber) -> Result<(), String> {
+pub fn compute_witness(args: &HashMap<String, String>) -> Result<String, String> {
     let path = Path::new(args.get(&"input".to_string()).unwrap());
     let file = File::open(path).map_err(|why| format!("Could not open {}: {}", path.display(), why))?;
 
     let mut reader = BufReader::new(file);
 
     match ProgEnum::deserialize(&mut reader)? {
-        ProgEnum::Bls12_381Program(p) => compute(p, args, block_number),
-        ProgEnum::Bn128Program(p) => compute(p, args, block_number),
-        ProgEnum::Bls12_377Program(p) => compute(p, args, block_number),
-        ProgEnum::Bw6_761Program(p) => compute(p, args, block_number),
-        ProgEnum::PallasProgram(p) => compute(p, args, block_number),
-        ProgEnum::VestaProgram(p) => compute(p, args, block_number),
+        ProgEnum::Bls12_381Program(p) => compute(p, args),
+        ProgEnum::Bn128Program(p) => compute(p, args),
+        ProgEnum::Bls12_377Program(p) => compute(p, args),
+        ProgEnum::Bw6_761Program(p) => compute(p, args),
+        ProgEnum::PallasProgram(p) => compute(p, args),
+        ProgEnum::VestaProgram(p) => compute(p, args),
     }
 }
 
 fn compute<'a, T: Field, I: Iterator<Item=ir::Statement<'a, T>>>(
     ir_prog: ir::ProgIterator<'a, T, I>,
     args: &HashMap<String, String>,
-    block_number: BlockNumber,
-) -> Result<(), String> {
+) -> Result<String, String> {
     vlog::warn!("Computing witness...");
 
     let verbose = matches!(args.get(&"verbose".to_string()).unwrap().as_str(),"ture");
@@ -111,7 +110,6 @@ fn compute<'a, T: Field, I: Iterator<Item=ir::Statement<'a, T>>>(
     .map_err(|e| format!("Could not parse argument: {}", e))?;
 
     let interpreter = zokrates_interpreter::Interpreter::default();
-    let public_inputs = ir_prog.public_inputs();
 
     let witness = interpreter
         .execute_with_log_stream(
@@ -132,13 +130,11 @@ fn compute<'a, T: Field, I: Iterator<Item=ir::Statement<'a, T>>>(
         println!("\nWitness: \n{}\n", results_json_value);
     }
 
-    let mut witness_str = String::new();
-
     let mut buff = BufWriter::new(Vec::new());
-    witness.write(&mut buff).map_err(|e| format!("Serialize witness failed: {}", e))?;
+    witness.write_json(&mut buff).map_err(|e| format!("Serialize witness failed: {}", e))?;
     let bytes = buff.into_inner().map_err(|e| format!("get witness buff failed: {}", e))?;
     let witness_str = String::from_utf8(bytes).map_err(|e| format!("get witness_str failed: {}", e))?;
     println!("\nWitness: \n{}\n", witness_str);
 
-    Ok(())
+    Ok(witness_str)
 }

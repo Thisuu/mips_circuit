@@ -14,8 +14,8 @@ publish = false # We don't want to publish our binaries.
 types = { path = "../../lib/types", version = "1.0" }
 storage = { path = "../../lib/storage", version = "1.0" }
 circuit = { path = "../../lib/circuit", version = "1.0" }
-
-zksync_utils = { path = "../../lib/utils", version = "1.0" }
+config = { path = "../../lib/config", version = "1.0" }
+utils = { path = "../../lib/utils", version = "1.0" }
 
 vlog = { path = "../../lib/vlog", version = "1.0"}
 tracing = "0.1.22"

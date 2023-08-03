@@ -1,6 +1,13 @@
 [workspace]
 resolver = "2"
 members = [
+    # Binaries
+    "core/bin/server",
+
+    # Server micro-services
+    "core/bin/witness_generator",
+
+    # Libraries
     "zokrates_common",
     "zokrates_core",
     "zokrates_cli",
@@ -23,6 +30,7 @@ members = [
     "zokrates_circom",
     "zokrates_profiler",
     "core/lib/circuit",
+    "core/lib/config",
     "core/lib/storage",
     "core/lib/vlog",
     "core/lib/utils",
