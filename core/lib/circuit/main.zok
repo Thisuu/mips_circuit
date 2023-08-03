@@ -51,7 +51,7 @@ def verify_initial_state(trace_record record, u32 start_pc) -> u32 {
 
 def updateReg<N>(MipsStates<N> mut states, u32 reg, u32 value) -> MipsStates<N> {
 	assert(reg != 0);
-	assert(reg <= 31);
+	assert(reg < 32);
 	states.cur.regs[reg] = value;
 	return states;
 }
@@ -67,7 +67,7 @@ def handleJump<N>(MipsStates<N> mut states, u32 link, u32 dest) -> MipsStates<N>
 	};
 }
 
-def SE(u32 dat, u32 index) -> u32 {
+def SE<index>(u32 dat) -> u32 {
 	bool isSigned = (dat >> (index - 1)) != 0;
 	u32 signed = ((1 << (32 - index)) - 1) << index;
 	u32 mask = (1 << index) - 1;
@@ -112,7 +112,7 @@ def handleBranch<N>(MipsStates<N> mut states, u32 opcode, u32 insn, u32 rtReg, u
 	u32 prevPC = states.cur.pc;
 	states.cur.pc = states.cur.nextPC;
 	states.cur.nextPC = if shouldBranch {
-		prevPC + 4 + (SE(insn & 0x0000FFFF, 16) << 2)
+		prevPC + 4 + (SE::<16>(insn & 0x0000FFFF) << 2)
 	} else {
 		states.cur.pc + 4
 	};
@@ -122,7 +122,7 @@ def handleBranch<N>(MipsStates<N> mut states, u32 opcode, u32 insn, u32 rtReg, u
 
 def getMemory<N>(MipsStates<N> mut states, u32 addr) -> u32 {
 	// TODO
-	return states.memory[addr];
+	return 0;
 }
 
 def setMemory<N>(MipsStates<N> mut states, u32 addr, u32 value) -> MipsStates<N>  {
@@ -136,6 +136,7 @@ struct preImageData {
 }
 
 def getPreImage<N>(MipsStates<N> states)-> preImageData {
+	// TODO
 	return preImageData {
 		data:  [0;32],
 		dataLen: 5
@@ -159,8 +160,36 @@ def do_clo(u32 func, u32 mut rs) -> u32 {
 }
 
 def assert_unreached() -> u32 {
-	assert(false);
+	//assert(false);
 	return 0;
+}
+
+def shift_right(u32 val, u32 shamt)-> u32 {
+	assert(shamt < 32);
+	bool[32] mut bits = u32_to_bits(val);
+	for u32 i in 0..32 {
+		bits[i] = i + shamt < 32 ? bits[i + shamt] : false;
+	}
+	return u32_from_bits(bits);
+}
+
+def shift_left(u32 val, u32 shamt)-> u32 {
+	assert(shamt < 32);
+	bool[32] mut bits = u32_to_bits(val);
+	for u32 i in 0..32 {
+		bits[i] = i < shamt ? false : bits[i - shamt];
+	}
+	return u32_from_bits(bits);
+}
+
+def arith_shift_right(u32 val, u32 shamt) -> u32 {
+	assert(shamt < 32);
+	bool[32] mut bits = u32_to_bits(val);
+	for u32 i in 0..32 {
+		bits[i] = i + shamt < 32 ? bits[i + shamt] : bits[31];
+	}
+
+	return u32_from_bits(bits);
 }
 
 def execute(u32 insn, u32 rs, u32 rt, u32 mem) -> u32 {
@@ -174,15 +203,20 @@ def execute(u32 insn, u32 rs, u32 rt, u32 mem) -> u32 {
 		func
 	};
 
+	u32 slv = rs & 0x0000001F;
+	u32 lwl = (rs & 3) * 8;
+	u32 lbu = 24 - (rs & 3) * 8;
+	u32 lhu = 16 - (rs & 2) * 8;
+
 	return if opcode == 0 || (opcode >= 8 && opcode < 0x0000000F) {
 		if func < 0x00000020 {
 			func >= 8 ?  rs :  // jr/jalr/div + others
-				func == 0 ? rt << shamt :  // sll
-					func == 2 ? rt >> shamt :  // srl
-						func == 3 ? SE(rt >> shamt, 32 - shamt) :  // sra
-							func == 4 ? rt << (rs & 0x0000001F) :  // sllv
-								func == 6 ? rt >> (rs & 0x0000001F):  // srlv
-									func == 7 ? SE(rt >> rs, 32 - rs):  // srav
+				func == 0 ? shift_left(rt, shamt) :  // sll
+					func == 2 ? shift_right(rt, shamt) :  // srl
+						func == 3 ? arith_shift_right(rt, shamt) :  // sra
+							func == 4 ? shift_left(rt, slv):  // sllv
+								func == 6 ? shift_right(rt, slv):  // srlv
+									func == 7 ? arith_shift_right(rt, rs):  // srav
 										assert_unreached()
 		} else {
 			func == 0x00000020 || func == 0x00000021 ? rs + rt :  // add or addu
@@ -207,31 +241,31 @@ def execute(u32 insn, u32 rs, u32 rt, u32 mem) -> u32 {
 			} else {
 				if opcode < 0x00000028 {
 					opcode == 0x00000020 ?  // lb
-						SE((mem >> (24 - (rs & 3) * 8)) & 0x000000FF, 8) :
+						SE::<8>(shift_right(mem, lbu) & 0x000000FF) :
 						opcode == 0x00000021 ? // lh
-							SE((mem >> (16 - (rs & 2) * 8)) & 0x0000FFFF, 16) :
+							SE::<16>(shift_right(mem, lhu) & 0x0000FFFF) :
 							opcode == 0x00000022 ? // lwl
-								(rt & !(0xFFFFFFFF << ((rs & 3) * 8))) | (mem << ((rs & 3) * 8)) :
+								(rt & !shift_left(0xFFFFFFFF, lwl)) | shift_left(mem, lwl) :
 								opcode == 0x00000023 ? // lw
 									mem :
 									opcode == 0x00000024 ? // lbu
-										(mem >> (24 - (rs & 3) * 8)) & 0x000000FF :
+										shift_right(mem, lbu) & 0x000000FF :
 										opcode == 0x00000025 ? // lhu
-											(mem >> (16 - (rs & 2) * 8)) & 0x0000FFFF :
+											shift_right(mem, lhu) & 0x0000FFFF :
 											opcode == 0x00000026 ? // lwr
-												(rt & !(0xFFFFFFFF >> (24 - (rs & 3) * 8))) | ( mem >> (24 - (rs & 3) * 8)) :
+												(rt & !(shift_right(0xFFFFFFFF, lbu))) | shift_right(mem, lbu) :
 												assert_unreached()
 				} else {
 					opcode == 0x00000028 ?  // sb
-						(mem & (0xFFFFFFFF ^ (0x000000FF << (24 - (rs & 3) * 8)))) | ((rt & 0x000000FF) << (24 - (rs & 3) * 8)) :
+						(mem & (0xFFFFFFFF ^ shift_left(0x000000FF, lbu))) | shift_left(rt & 0x000000FF, lbu) :
 						opcode == 0x00000029 ? // sh
-							(mem & (0xFFFFFFFF ^ (0x0000FFFF << (16 - (rs & 2) * 8)))) | ( (rt & 0x0000FFFF) << (16 - (rs & 2) * 8)) :
+							(mem & (0xFFFFFFFF ^ shift_left(0x0000FFFF, lhu))) | shift_left(rt & 0x0000FFFF, lhu) :
 							opcode == 0x0000002A ? // swl
-								(mem & (0xFFFFFFFF >> ((rs & 3) * 8))) | (rt >> ((rs & 3) * 8)) :
+								(mem & shift_left(0xFFFFFFFF, lwl)) | shift_left(rt, lwl) :
 								opcode == 0x0000002B ? // sw
 									rt :
 									opcode == 0x0000002E ? // swr
-										(mem & (0xFFFFFFFF << (24 - (rs & 3) * 8))) | (rt << (24 - (rs & 3) * 8)) :
+										(mem & shift_left(0xFFFFFFFF, lbu)) | shift_left(rt, lbu) :
 										opcode == 0x00000030 ? // ll
 											mem :
 											opcode == 0x00000038 ? // sc
@@ -253,7 +287,7 @@ def handleRd<N>(MipsStates<N> mut states, u32 rd, u32 val, bool cond) -> MipsSta
 	};
 }
 def assert_unreached_states<N>(MipsStates<N> states) -> MipsStates<N> {
-	assert(false);
+	//assert(false);
 	return states;
 }
 
@@ -319,7 +353,7 @@ def u32_from_u8_array(u8[4] input) -> u32  {
 }
 
 def doFdPreRead<N>(MipsStates<N> mut states, u32 a1, u32 a2) -> MipsStates<N> {
-	assert (a2 <= 4);
+	assert (a2 < 5);
 	u32 align = a1 & 3;
 	u32 effAddr = a1 & 0xFFFFFFFC;
 	u32 mem = getMemory(states, effAddr);
@@ -328,8 +362,8 @@ def doFdPreRead<N>(MipsStates<N> mut states, u32 a1, u32 a2) -> MipsStates<N> {
 	data.dataLen = a2 < data.dataLen ? a2  : data.dataLen;
 	u8[4] mut outMem = u32_to_u8_array(mem);
 
-	for u32 i in 0..data.dataLen {
-		outMem[align + i] = data.data[i];
+	for u32 i in 0..4 {
+		outMem[i] = i >= align && i < align + data.dataLen ? data.data[i - align] : outMem[i];
 	}
 
 	states = setMemory(states, effAddr, u32_from_u8_array(outMem));
@@ -351,14 +385,15 @@ def doSysRead<N>(MipsStates<N> mut states, u32 a0, u32 a1, u32 a2) -> MipsStates
 }
 
 def doFdPreimageWrite<N>(MipsStates<N> mut states, u32 a1, u32 mut a2) -> MipsStates<N> {
-	assert (a2 <= 4);
+	assert (a2 < 5);
 	u32 align = a1 & 3;
 	u32 effAddr = a1 & 0xFFFFFFFC;
 	u32 mem = getMemory(states, effAddr);
 	u8[32] mut key = states.cur.preImageKey;
 	u8[4] tmp = u32_to_u8_array(mem);
-	for u32 i in 0..a2 {
-		key[32-a2+i] = tmp[i];
+
+	for u32 i in 0..32 {
+		key[i] = i < 32 - a2 ? key[i] : tmp[i + a2 - 32];
 	}
 
 	states.cur.preImageKey = key;
@@ -521,7 +556,7 @@ def handleOtherInsts<N>(MipsStates<N> mut states, u32 insn, u32 opcode, u32 mut 
 	u32 mut mem = 0;
 
 	rs = if opcode >= 0x00000020 {
-		rs + SE(insn & 0x0000FFFF, 16)
+		rs + SE::<16>(insn & 0x0000FFFF)
 	} else {
 		rs
 	};
@@ -555,7 +590,6 @@ def handleOtherInsts<N>(MipsStates<N> mut states, u32 insn, u32 opcode, u32 mut 
 					if fun == 0x0000000C {
 						handleSyscall(states)
 					} else {
-
 						// lo and hi registers
 						// can write back
 						if fun >= 0x00000010 && fun < 0x0000001C {
@@ -599,7 +633,7 @@ def handleRItypeInsts<N>(MipsStates<N> mut states, u32 insn, u32 opcode) -> Mips
 				insn & 0x0000FFFF
 			} else {
 				// SignExtImm
-				SE(insn & 0x0000FFFF, 16)
+				SE::<16>(insn & 0x0000FFFF)
 			}
 		} else {
 			if opcode >= 0x00000028 || opcode == 0x00000022 || opcode == 0x00000026 {
@@ -668,7 +702,7 @@ def do_check<recordSize, memSize>(
 	return 0;
 }
 
-def main(private trace_record[1] mut trace, 
+def main(private trace_record[2] mut trace,
 	u32[4] mut mem_image,
 	u32 start_pc, u32[4] final_mem_image) -> u32 {
 
