@@ -1313,7 +1313,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c6dd675567eb3e35787bd2583d129e85fabc7503b0a093d08c51198a307e2091"
 dependencies = [
  "heck",
- "proc-macro-error",
+ "proc-macro-error 0.4.12",
  "proc-macro2 1.0.66",
  "quote 1.0.26",
  "syn 1.0.109",
@@ -1348,6 +1348,18 @@ dependencies = [
  "lazy_static",
  "nom 5.1.3",
  "serde",
+]
+
+[[package]]
+name = "config"
+version = "1.0.0"
+dependencies = [
+ "envy",
+ "num 0.3.1",
+ "serde",
+ "serde_json",
+ "types",
+ "utils",
 ]
 
 [[package]]
@@ -1722,7 +1734,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ef82259c587bceda08349f28ff00f69ae4c897898f254140af6021eb218e8232"
 dependencies = [
  "async-trait",
- "config",
+ "config 0.11.0",
  "num_cpus",
  "serde",
  "tokio",
@@ -1904,6 +1916,15 @@ name = "environment"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f4b14e20978669064c33b4c1e0fb4083412e40fe56cbea2eae80fd7591503ee"
+
+[[package]]
+name = "envy"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f47e0157f2cb54f5ae1bd371b30a2ae4311e1c028f575cd4e81de7353215965"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "errno"
@@ -3897,7 +3918,20 @@ version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "18f33027081eba0a6d8aba6d1b1c3a3be58cbb12106341c2d5759fcd9b5277e7"
 dependencies = [
- "proc-macro-error-attr",
+ "proc-macro-error-attr 0.4.12",
+ "proc-macro2 1.0.66",
+ "quote 1.0.26",
+ "syn 1.0.109",
+ "version_check",
+]
+
+[[package]]
+name = "proc-macro-error"
+version = "1.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da25490ff9892aab3fcf7c36f08cfb902dd3e71ca0f9f9517bea02a73a5ce38c"
+dependencies = [
+ "proc-macro-error-attr 1.0.4",
  "proc-macro2 1.0.66",
  "quote 1.0.26",
  "syn 1.0.109",
@@ -3914,6 +3948,17 @@ dependencies = [
  "quote 1.0.26",
  "syn 1.0.109",
  "syn-mid",
+ "version_check",
+]
+
+[[package]]
+name = "proc-macro-error-attr"
+version = "1.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a1be40180e52ecc98ad80b184934baf3d0d29f979574e439af5a55274b35f869"
+dependencies = [
+ "proc-macro2 1.0.66",
+ "quote 1.0.26",
  "version_check",
 ]
 
@@ -4768,6 +4813,16 @@ dependencies = [
 name = "server"
 version = "1.0.0"
 dependencies = [
+ "anyhow",
+ "config 1.0.0",
+ "ctrlc",
+ "futures",
+ "serde",
+ "serde_json",
+ "storage",
+ "structopt",
+ "tokio",
+ "vlog",
  "witness_generator",
 ]
 
@@ -5150,6 +5205,30 @@ name = "strsim"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
+
+[[package]]
+name = "structopt"
+version = "0.3.26"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0c6b5c64445ba8094a6ab0c3cd2ad323e07171012d9c98b0b15651daf1787a10"
+dependencies = [
+ "clap",
+ "lazy_static",
+ "structopt-derive",
+]
+
+[[package]]
+name = "structopt-derive"
+version = "0.4.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dcb5ae327f9cc13b68763b5749770cb9e048a99bd9dfdfa58d0cf05d5f64afe0"
+dependencies = [
+ "heck",
+ "proc-macro-error 1.0.4",
+ "proc-macro2 1.0.66",
+ "quote 1.0.26",
+ "syn 1.0.109",
+]
 
 [[package]]
 name = "subtle"
@@ -6223,6 +6302,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "circuit",
+ "config 1.0.0",
  "ctrlc",
  "futures",
  "jsonwebtoken",
