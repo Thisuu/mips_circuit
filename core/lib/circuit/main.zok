@@ -2,6 +2,8 @@ import "utils/casts/u64_to_bits";
 import "utils/casts/u64_from_bits";
 import "utils/casts/u32_to_bits";
 import "utils/casts/u32_from_bits";
+import "utils/casts/u8_to_bits";
+import "utils/casts/u8_from_bits";
 
 struct trace_record {
 	u32 cycle;
@@ -10,7 +12,7 @@ struct trace_record {
 	u32 lo;
 	u32 hi;
 	u32[32] regs;
-	u32[32] preImageKey;
+	u8[32] preImageKey;
 	u32 preImageOffset;
 	u32 heap;
 	u8 exitCode;
@@ -128,6 +130,18 @@ def setMemory<N>(MipsStates<N> mut states, u32 addr, u32 value) -> MipsStates<N>
 	return states;
 }
 
+struct preImageData {
+	u8[32] data;
+	u32 dataLen;
+}
+
+def getPreImage<N>(MipsStates<N> states)-> preImageData {
+	return preImageData {
+		data:  [0;32],
+		dataLen: 5
+	};
+}
+
 def do_clo(u32 func, u32 mut rs) -> u32 {
 	rs = if func == 0x00000020 {
 		!rs
@@ -238,10 +252,168 @@ def handleRd<N>(MipsStates<N> mut states, u32 rd, u32 val, bool cond) -> MipsSta
 		states
 	};
 }
+def assert_unreached_states<N>(MipsStates<N> states) -> MipsStates<N> {
+	assert(false);
+	return states;
+}
+
+def updateSysRet<N>(MipsStates<N> mut states, u32 v0, u32 v1) -> MipsStates<N>
+{
+	states = updateReg(states, 2, v0);
+	states = updateReg(states, 7, v1);
+	states.cur.pc = states.cur.nextPC;
+	states.cur.nextPC = states.cur.nextPC + 4;
+	return states;
+}
+
+def doSysMmap<N>(MipsStates<N> mut states, u32 a0, u32 a1) -> MipsStates<N>
+{
+	u32 sz = a1 & 0x00000FFF == 0 ? a1 : (a1 + 0x00001000) & 0xFFFFF000;
+	u32 v0 = a0 == 0 ? states.cur.heap : a0;
+	states.cur.heap = a0 == 0 ? states.cur.heap + sz : states.cur.heap;
+	return updateSysRet(states, v0, 0);
+}
+
+def u8_from_u32(u32 input) -> u8 {
+	bool[32] u32_bits = [...u32_to_bits(input)];
+    return u8_from_bits(u32_bits[0..8]);
+}
+
+def doSysExitGroup<N>(MipsStates<N> mut states, u32 a0) -> MipsStates<N>
+{
+	states.cur.exited = true;
+	states.cur.exitCode = u8_from_u32(a0);
+	return states;
+}
+
+//	fdStdin         = 0
+//	fdStdout        = 1
+//	fdStderr        = 2
+//	fdHintRead      = 3
+//	fdHintWrite     = 4
+//	fdPreimageRead  = 5
+//	fdPreimageWrite = 6
+
+//	MipsEBADF  = 0x9
+//	MipsEINVAL = 0x16
+
+def u32_to_u8_array(u32 input) -> u8[4] {
+    bool[32] bits = u32_to_bits(input);
+    return [
+        u8_from_bits(bits[0..8]),
+        u8_from_bits(bits[8..16]),
+        u8_from_bits(bits[16..24]),
+        u8_from_bits(bits[24..32])
+    ];
+}
+
+def u32_from_u8_array(u8[4] input) -> u32  {
+    bool[32] bits =  [
+        ...u8_to_bits(input[0]),
+        ...u8_to_bits(input[1]),
+        ...u8_to_bits(input[2]),
+        ...u8_to_bits(input[3])
+    ];
+
+	return u32_from_bits(bits);
+}
+
+def doFdPreRead<N>(MipsStates<N> mut states, u32 a1, u32 a2) -> MipsStates<N> {
+	assert (a2 <= 4);
+	u32 align = a1 & 3;
+	u32 effAddr = a1 & 0xFFFFFFFC;
+	u32 mem = getMemory(states, effAddr);
+	preImageData mut data = getPreImage(states);
+	data.dataLen = data.dataLen > 4 - align ? 4 - align  : data.dataLen;
+	data.dataLen = a2 < data.dataLen ? a2  : data.dataLen;
+	u8[4] mut outMem = u32_to_u8_array(mem);
+
+	for u32 i in 0..data.dataLen {
+		outMem[align + i] = data.data[i];
+	}
+
+	states = setMemory(states, effAddr, u32_from_u8_array(outMem));
+
+	states.cur.preImageOffset = states.cur.preImageOffset + data.dataLen;
+	return updateSysRet(states, data.dataLen, 0);
+}
+
+def doSysRead<N>(MipsStates<N> mut states, u32 a0, u32 a1, u32 a2) -> MipsStates<N> {
+	// args: a0 = fd, a1 = addr, a2 = count
+	// returns: v0 = read, v1 = err code
+	u32 v0 = a0 == 3 ? a2 :           // fdHintRead
+				a0 == 0 ? 0 :         // fdStdin
+					0xFFFFFFFF;       // default
+	u32 v1 = a0 == 3 || a0 == 0 ? 0 : 9;
+
+	return a0 == 5 ? doFdPreRead(states, a1, a2) :
+					 updateSysRet(states, v0, v1);
+}
+
+def doFdPreimageWrite<N>(MipsStates<N> mut states, u32 a1, u32 mut a2) -> MipsStates<N> {
+	assert (a2 <= 4);
+	u32 align = a1 & 3;
+	u32 effAddr = a1 & 0xFFFFFFFC;
+	u32 mem = getMemory(states, effAddr);
+	u8[32] mut key = states.cur.preImageKey;
+	u8[4] tmp = u32_to_u8_array(mem);
+	for u32 i in 0..a2 {
+		key[32-a2+i] = tmp[i];
+	}
+
+	states.cur.preImageKey = key;
+	states.cur.preImageOffset = 0;
+	return states;
+}
+
+def doSysWrite<N>(MipsStates<N> mut states, u32 a0, u32 a1, u32 mut a2) -> MipsStates<N> {
+	// args: a0 = fd, a1 = addr, a2 = count
+	// returns: v0 = read, v1 = err code
+
+	u32 align = a1 & 3;
+	a2 = a0 == 6 && a2 > 4 - align ? 4 - align : a2;
+	u32 v0 = (a0 == 1 || a0 == 2 || a0 == 4 || a0 == 6) ? a2 : 0xFFFFFFFF;
+	u32 v1 = (a0 == 1 || a0 == 2 || a0 == 4 || a0 == 6) ? 0 : 9;
+
+	states = a0 == 6 ? doFdPreimageWrite(states, a1, a2) : states;
+	return updateSysRet(states, v0, v1);
+}
+
+def doSysFcntl<N>(MipsStates<N> mut states, u32 a0, u32 a1) -> MipsStates<N>
+{
+	// args: a0 = fd, a1 = cmd
+	u32 v0 = (a1 == 3) ? (a0 == 0 || a0 == 3 || a0 == 5) ?  0 :
+							(a0 == 1 || a0 == 2 || a0 == 4 || a0 == 6) ? 1 : 0xFFFFFFFF
+					   : 0xFFFFFFFF;
+	u32 v1 = (a1 == 3) ? (a0 <= 6) ? 0 : 9
+	                   : 0x00000016;
+	return updateSysRet(states, v0, v1);
+}
+
+//	sysMmap      = 4090
+//	sysBrk       = 4045
+//	sysClone     = 4120
+//	sysExitGroup = 4246
+//	sysRead      = 4003
+//	sysWrite     = 4004
+//	sysFcntl     = 4055
 
 def handleSyscall<N>(MipsStates<N> mut states) -> MipsStates<N> {
-	// TODO
-	return states;
+	u32 sysNum = states.cur.regs[2];
+	u32 a0 = states.cur.regs[4];
+	u32 a1 = states.cur.regs[5];
+	u32 a2 = states.cur.regs[6];
+	u32 mut v0 = 0;
+	u32 mut v1 = 0;
+
+	return sysNum == 4090 ? doSysMmap(states, a0, a1) :
+			 sysNum == 4045 ? updateSysRet(states, 0x40000000, 0) :
+				sysNum == 4120 ? updateSysRet(states, 1, 0) :
+				  sysNum == 4246 ? doSysExitGroup(states, a0) :
+					sysNum == 4003 ? doSysRead(states, a0, a1, a2) :
+					  sysNum == 4004 ? doSysWrite(states, a0, a1, a2) :
+						sysNum == 4005 ? doSysFcntl(states, a0, a1) :
+						  assert_unreached_states(states);
 }
 
 def u64_from_u32(u32 input, bool sign) -> u64 {
