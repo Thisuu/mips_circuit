@@ -16,12 +16,14 @@ use jsonwebtoken::{decode, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 // Workspace deps
+use config::ProverConfig;
 // Local deps
 use self::database_interface::DatabaseInterface;
 use self::scaler::ScalerOracle;
 use tokio::task::JoinHandle;
 use types::BlockNumber;
 use utils::panic_notify::{spawn_panic_handler, ThreadPanicNotify};
+use config::configs::api::ProverApiConfig;
 
 pub mod database;
 mod database_interface;
@@ -120,4 +122,76 @@ pub struct RequiredReplicasOutput {
     /// Amount of the prover entities required for server
     /// to run optimally.
     needed_count: u32,
+}
+
+pub fn run_prover_server<DB: DatabaseInterface>(
+    database: DB,
+    prover_api_opts: ProverApiConfig,
+    prover_opts: ProverConfig,
+) -> JoinHandle<()> {
+    let witness_generator_opts = prover_opts.witness_generator;
+    let core_opts = prover_opts.core;
+    let (handler, panic_sender) = spawn_panic_handler();
+
+    thread::Builder::new()
+        .name("prover_server".to_string())
+        .spawn(move || {
+            let _panic_sentinel = ThreadPanicNotify(panic_sender.clone());
+            let actix_runtime = actix_rt::System::new();
+
+            actix_runtime.block_on(async move {
+
+                let last_verified_block = 0; // FIXME
+
+                // Start pool maintainer threads.
+                for offset in 0..witness_generator_opts.witness_generators {
+                    let start_block = (last_verified_block + offset + 1) as u32;
+                    let block_step = witness_generator_opts.witness_generators as u32;
+                    vlog::info!(
+                        "Starting witness generator ({},{})",
+                        start_block,
+                        block_step
+                    );
+                    let pool_maintainer = witness_generator::WitnessGenerator::new(
+                        database.clone(),
+                        witness_generator_opts.prepare_data_interval(),
+                        BlockNumber(start_block),
+                        BlockNumber(block_step),
+                    );
+                    pool_maintainer.start(panic_sender.clone());
+                }
+                // Start HTTP server.
+                let secret_auth = prover_api_opts.secret_auth.clone();
+                let idle_provers = core_opts.idle_provers;
+                HttpServer::new(move || {
+                    let app_state =
+                        AppState::new(secret_auth.clone(), database.clone(), idle_provers);
+
+                    let auth = HttpAuthentication::bearer(move |req, credentials| async {
+                        let secret_auth = req
+                            .app_data::<web::Data<AppState<DB>>>()
+                            .expect("failed get AppState upon receipt of the authentication token")
+                            .secret_auth
+                            .clone();
+                        AuthTokenValidator::new(&secret_auth)
+                            .validator(req, credentials)
+                            .await
+                    });
+
+                    // By calling `register_data` instead of `data` we're avoiding double
+                    // `Arc` wrapping of the object.
+                    App::new()
+                        .wrap(auth)
+                        .app_data(web::Data::new(app_state))
+                        .route("/status", web::get().to(status))
+                })
+                    .bind(&prover_api_opts.bind_addr())
+                    .expect("failed to bind")
+                    .run()
+                    .await
+            })
+        })
+        .expect("failed to start prover server");
+
+    handler
 }

@@ -1,15 +1,18 @@
-use futures::{channel::mpsc, executor::block_on, SinkExt, StreamExt};
+use futures::{channel::mpsc, executor::block_on, SinkExt, StreamExt, future};
 use std::cell::RefCell;
 use std::str::FromStr;
+use std::thread;
 
 use structopt::StructOpt;
 
 use serde::{Deserialize, Serialize};
 
-use witness_generator::run_prover_server;
-
 use tokio::task::JoinHandle;
-use zksync_storage::ConnectionPool;
+use config::configs::api::ProverApiConfig;
+use storage::ConnectionPool;
+use config::ProverConfig;
+use storage::database_interface::DatabaseInterface;
+use witness_generator::run_prover_server;
 
 const DEFAULT_CHANNEL_CAPACITY: usize = 32_768;
 
@@ -140,7 +143,6 @@ async fn run_server(components: &ComponentsToRun) {
     let connection_pool = ConnectionPool::new(None);
     let read_only_connection_pool = ConnectionPool::new_readonly_pool(None);
     let (stop_signal_sender, mut stop_signal_receiver) = mpsc::channel(256);
-    let (alternative_tx_stop_signal_sender, mut alternative_tx_stop_signal_receiver) = mpsc::channel(256);
 
     let mut tasks = vec![];
 
@@ -164,10 +166,26 @@ async fn run_server(components: &ComponentsToRun) {
         _ = async { stop_signal_receiver.next().await } => {
             vlog::warn!("Stop signal received, shutting down");
         }
-        _ = async { alternative_tx_stop_signal_receiver.next().await } => {
-            vlog::warn!("Alternative tx Stop signal received, shutting down");
-        }
     };
+}
+
+/// Waits for any of the tokio tasks to be finished.
+/// Since the main tokio tasks are used as actors which should live as long
+/// as application runs, any possible outcome (either `Ok` or `Err`) is considered
+/// as a reason to stop the server completely.
+pub async fn wait_for_tasks(task_futures: Vec<JoinHandle<()>>) {
+    match future::select_all(task_futures).await {
+        (Ok(_), _, _) => {
+            panic!("One of the actors finished its run, while it wasn't expected to do it");
+        }
+        (Err(error), _, _) => {
+            vlog::warn!("One of the tokio actors unexpectedly finished, shutting down");
+            if error.is_panic() {
+                // Resume the panic on the main task
+                std::panic::resume_unwind(error.into_panic());
+            }
+        }
+    }
 }
 
 
@@ -175,6 +193,6 @@ pub fn run_witness_generator(connection_pool: ConnectionPool) -> JoinHandle<()> 
     vlog::info!("Starting the Prover server actors");
     let prover_api_config = ProverApiConfig::from_env();
     let prover_config = ProverConfig::from_env();
-    let database = zksync_witness_generator::database::Database::new(connection_pool);
+    let database = witness_generator::database::Database::new(connection_pool);
     run_prover_server(database, prover_api_config, prover_config)
 }
