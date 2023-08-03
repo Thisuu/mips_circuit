@@ -58,6 +58,7 @@ pub struct ProverSchema<'a, 'c>(pub &'a mut StorageProcessor<'c>);
 
 impl<'a, 'c> ProverSchema<'a, 'c> {
 
+
     /// Stores witness for a block
     pub async fn store_witness(
         &mut self,
