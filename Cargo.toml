@@ -30,6 +30,7 @@ members = [
     "zokrates_circom",
     "zokrates_profiler",
     "core/lib/circuit",
+    "core/lib/config",
     "core/lib/storage",
     "core/lib/vlog",
     "core/lib/utils",
