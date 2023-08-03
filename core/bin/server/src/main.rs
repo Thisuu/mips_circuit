@@ -144,21 +144,6 @@ async fn run_server(components: &ComponentsToRun) {
 
     let mut tasks = vec![];
 
-    if components.0.contains(&Component::Core) {
-        let eth_gateway = create_eth_gateway();
-
-        tasks.append(
-            &mut run_core(
-                connection_pool.clone(),
-                read_only_connection_pool.clone(),
-                &ZkSyncConfig::from_env(),
-                eth_gateway.clone(),
-            )
-            .await
-            .unwrap(),
-        );
-    }
-
     if components.0.contains(&Component::WitnessGenerator) {
         tasks.push(run_witness_generator(connection_pool.clone()))
     }

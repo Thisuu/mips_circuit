@@ -139,6 +139,11 @@ impl<'a> StorageProcessor<'a> {
         chain::ChainIntermediator(self)
     }
 
+    /// Gains access to the `Prover` schema.
+    pub fn prover_schema(&mut self) -> prover::ProverSchema<'_, 'a> {
+        prover::ProverSchema(self)
+    }
+
     fn conn(&mut self) -> &mut PgConnection {
         match &mut self.conn {
             ConnectionHolder::Pooled(conn) => conn,
