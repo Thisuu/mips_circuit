@@ -52,7 +52,11 @@ def verify_initial_state(trace_record record, u32 start_pc) -> u32 {
 def updateReg<N>(MipsStates<N> mut states, u32 reg, u32 value) -> MipsStates<N> {
 	assert(reg != 0);
 	assert(reg < 32);
-	states.cur.regs[reg] = value;
+
+	for u32 i in 1..32 {
+		states.cur.regs[i] = i == reg ? value : states.cur.regs[i] ;
+	}
+
 	return states;
 }
 
@@ -122,7 +126,7 @@ def handleBranch<N>(MipsStates<N> mut states, u32 opcode, u32 insn, u32 rtReg, u
 
 def getMemory<N>(MipsStates<N> mut states, u32 addr) -> u32 {
 	// TODO
-	return 0;
+	return states.memory[addr];
 }
 
 def setMemory<N>(MipsStates<N> mut states, u32 addr, u32 value) -> MipsStates<N>  {
