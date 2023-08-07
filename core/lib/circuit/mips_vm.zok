@@ -4,7 +4,8 @@ import "utils/casts/u32_to_bits";
 import "utils/casts/u32_from_bits";
 import "utils/casts/u8_to_bits";
 import "utils/casts/u8_from_bits";
-from "hashes/keccak/256bit" import main as kecca256;
+//from "hashes/keccak/256bit" import main as kecca256;
+import "hashes/pedersen/512bitBool" as pedersen;
 
 
 struct keccak_hash {
@@ -155,15 +156,92 @@ def handleBranch(trace_record mut states, u32 opcode, u32 insn, u32 rtReg, u32 r
 
 def hashPair(u8[32] a, u8[32] b)-> u8[32] {
 	u8[64] c = [
-		...a,
+		...b,
 		...b
 	];
-	return kecca256(c);
+	bool[512] e = [
+		...u8_to_bits(a[0]),
+		...u8_to_bits(a[1]),
+		...u8_to_bits(a[2]),
+		...u8_to_bits(a[3]),
+		...u8_to_bits(a[4]),
+		...u8_to_bits(a[5]),
+		...u8_to_bits(a[6]),
+		...u8_to_bits(a[7]),
+		...u8_to_bits(a[8]),
+		...u8_to_bits(a[9]),
+		...u8_to_bits(a[10]),
+		...u8_to_bits(a[11]),
+		...u8_to_bits(a[12]),
+		...u8_to_bits(a[13]),
+		...u8_to_bits(a[14]),
+		...u8_to_bits(a[15]),
+		...u8_to_bits(a[16]),
+		...u8_to_bits(a[17]),
+		...u8_to_bits(a[18]),
+		...u8_to_bits(a[19]),
+		...u8_to_bits(a[20]),
+		...u8_to_bits(a[21]),
+		...u8_to_bits(a[22]),
+		...u8_to_bits(a[23]),
+		...u8_to_bits(a[24]),
+		...u8_to_bits(a[25]),
+		...u8_to_bits(a[26]),
+		...u8_to_bits(a[27]),
+		...u8_to_bits(a[26]),
+		...u8_to_bits(a[29]),
+		...u8_to_bits(a[30]),
+		...u8_to_bits(a[31]),
+		...u8_to_bits(b[0]),
+		...u8_to_bits(b[1]),
+		...u8_to_bits(b[2]),
+		...u8_to_bits(b[3]),
+		...u8_to_bits(b[4]),
+		...u8_to_bits(b[5]),
+		...u8_to_bits(b[6]),
+		...u8_to_bits(b[7]),
+		...u8_to_bits(b[8]),
+		...u8_to_bits(b[9]),
+		...u8_to_bits(b[10]),
+		...u8_to_bits(b[11]),
+		...u8_to_bits(b[12]),
+		...u8_to_bits(b[13]),
+		...u8_to_bits(b[14]),
+		...u8_to_bits(b[15]),
+		...u8_to_bits(b[16]),
+		...u8_to_bits(b[17]),
+		...u8_to_bits(b[18]),
+		...u8_to_bits(b[19]),
+		...u8_to_bits(b[20]),
+		...u8_to_bits(b[21]),
+		...u8_to_bits(b[22]),
+		...u8_to_bits(b[23]),
+		...u8_to_bits(b[24]),
+		...u8_to_bits(b[25]),
+		...u8_to_bits(b[26]),
+		...u8_to_bits(b[27]),
+		...u8_to_bits(b[26]),
+		...u8_to_bits(b[29]),
+		...u8_to_bits(b[30]),
+		...u8_to_bits(b[31])
+	];
+	
+    bool[256] result = pedersen(e);
+
+    u8[32] mut res = [0; 32];
+
+    for u32 i in 0..32 {
+        res[i] = u8_from_bits(result[8 * i..8 * (i + 1)]);
+    }
+
+    return res;
 }
 
 def getDataFromProof(memory_proof proof, u32 addr, u8[32] root) -> u32 {
 	assert (addr & 3 == 0);
+	
 	u8[32] leaf = proof.node[0].hash;
+
 	u32 mut path = addr >> 5;
 	u8[32] mut node = leaf;
 
@@ -197,9 +275,9 @@ def getMemory(trace_record mut states, u32 addr) -> u32 {
 
 def setMemory(trace_record mut states, u32 addr, u32 value) -> trace_record  {
 	assert (addr & 3 == 0);
+
 	u8[32] mut leaf = states.mem.mem_proof.node[0].hash;
 	u8[4] data = u32_to_u8_array(value);
-
 	u32 shamt = 28 - (addr & 0x0000001F);
 
 	// May need take Endian into consideration
@@ -220,6 +298,7 @@ def setMemory(trace_record mut states, u32 addr, u32 value) -> trace_record  {
 	}
 
 	states.memRoot.hash = node;
+
 	return states;
 }
 
@@ -760,7 +839,7 @@ def do_check<recordSize>(
 	return trace[recordSize - 1];
 }
 
-def main(private trace_record[2] mut trace) -> trace_record {
+def main(private trace_record[10] mut trace) -> trace_record {
 
 	return do_check(trace);
 }
