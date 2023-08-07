@@ -77,7 +77,42 @@ impl<DB: DatabaseInterface> WitnessGenerator<DB> {
 
             let next_block = BlockNumber(*current_block + *self.block_step);
 
-            let block_args = HashMap::new(); // FIXME get specificed block args
+            let mut block_args = HashMap::new(); // FIXME get specificed block args from db
+            block_args.insert("input".to_string(), "/Users/bj89200ml/Documents/rust_workspace/src/github.com/zkMIPS/mips_circuit/core/lib/circuit/out".to_string());
+            block_args.insert("abi-spec".to_string(), "/Users/bj89200ml/Documents/rust_workspace/src/github.com/zkMIPS/mips_circuit/core/lib/circuit/abi.json".to_string());
+            block_args.insert("arguments".to_string(), r#"[
+	[{
+		"cycle": "0",
+		"pc": "0",
+		"nextPC": "0",
+		"lo": "0",
+		"hi": "0",
+		"regs": ["0", "0", "0", "0","0", "0", "0", "0","0", "0", "0", "0","0", "0", "0", "0","0", "0", "0", "0","0", "0", "0", "0","0", "0", "0", "0","0", "0", "0", "0"],
+		"preImageKey": ["0", "0", "0", "0","0", "0", "0", "0","0", "0", "0", "0","0", "0", "0", "0","0", "0", "0", "0","0", "0", "0", "0","0", "0", "0", "0","0", "0", "0", "0"],
+		"preImageOffset": "0",
+		"heap": "0",
+		"exitCode": "0",
+		"exited": false
+	}, {
+		"cycle": "0",
+		"pc": "0",
+		"nextPC": "0",
+		"lo": "0",
+		"hi": "0",
+		"regs": ["0", "0", "0", "0","0", "0", "0", "0","0", "0", "0", "0","0", "0", "0", "0","0", "0", "0", "0","0", "0", "0", "0","0", "0", "0", "0","0", "0", "0", "0"],
+		"preImageKey": ["0", "0", "0", "0","0", "0", "0", "0","0", "0", "0", "0","0", "0", "0", "0","0", "0", "0", "0","0", "0", "0", "0","0", "0", "0", "0","0", "0", "0", "0"],
+		"preImageOffset": "0",
+		"heap": "0",
+		"exitCode": "0",
+		"exited": true
+	}],
+	[
+		"0", "0", "0", "0"
+	],
+	"0", [
+		"0", "0", "0", "0"
+	]
+]"#.to_string());
             let mut storage = self.database.acquire_connection().await.unwrap();
             let witness_str = circuit::witness::compute_witness(&block_args).unwrap();
             self.database

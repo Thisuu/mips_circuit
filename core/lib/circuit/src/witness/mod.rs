@@ -1,6 +1,7 @@
 // Built-in deps
 use std::collections::HashMap;
 use std::fs::File;
+use std::str::FromStr;
 use std::io::{BufReader, BufWriter, Read, stdin};
 use std::path::Path;
 use zokrates_abi::Encode;
@@ -37,9 +38,10 @@ fn compute<'a, T: Field, I: Iterator<Item=ir::Statement<'a, T>>>(
 ) -> Result<String, String> {
     vlog::warn!("Computing witness...");
 
-    let verbose = matches!(args.get(&"verbose".to_string()).unwrap().as_str(),"ture");
-    let is_stdin = matches!(args.get(&"stdin".to_string()).unwrap().as_str(),"ture");
-    let is_abi = matches!(args.get(&"abi".to_string()).unwrap().as_str(),"ture");
+    let t = "true".to_string();
+    let verbose = matches!(args.get(&"verbose".to_string()).unwrap_or(&"true".to_string()), t);
+    let is_stdin = matches!(args.get(&"stdin".to_string()).unwrap_or(&"true".to_string()),t);
+    let is_abi = matches!(args.get(&"abi".to_string()).unwrap_or(&"true".to_string()),t);
 
     if !is_stdin && is_abi {
         return Err("ABI input as inline argument is not supported. Please use `stdin`.".into());
