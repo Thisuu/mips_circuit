@@ -21,7 +21,7 @@ struct memory_wit {
 	memory_proof mem_proof;
 	u8[32] preImageKey;
 	u32 preImageOffset;
-	u8[16] PreimageValue;
+	//u8[16] PreimageValue;
 }
 
 struct trace_record {
@@ -839,7 +839,7 @@ def do_check<recordSize>(
 	return trace[recordSize - 1];
 }
 
-def main(private trace_record[10] mut trace) -> trace_record {
+def main(private trace_record[2] mut trace) -> trace_record {
 
 	return do_check(trace);
 }
