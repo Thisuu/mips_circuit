@@ -26,7 +26,7 @@ use utils::panic_notify::{spawn_panic_handler, ThreadPanicNotify};
 use config::configs::api::ProverApiConfig;
 
 pub mod database;
-mod database_interface;
+pub mod database_interface;
 mod scaler;
 mod witness_generator;
 

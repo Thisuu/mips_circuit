@@ -135,8 +135,8 @@ fn compute<'a, T: Field, I: Iterator<Item=ir::Statement<'a, T>>>(
     let mut buff = BufWriter::new(Vec::new());
     witness.write(&mut buff).map_err(|e| format!("Serialize witness failed: {}", e))?;
     let bytes = buff.into_inner().map_err(|e| format!("get witness buff failed: {}", e))?;
-    let witness_str = String::from_utf8(bytes).map_err(|e| format!("get witness_str failed: {}", e))?;
-    println!("\nWitness: \n{}\n", witness_str);
+    let witness_str = hex::encode(bytes);
+    println!("\nwitness_str: \n{}\n", witness_str);
 
     Ok(witness_str)
 }

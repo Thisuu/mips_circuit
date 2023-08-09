@@ -118,23 +118,23 @@ impl<'a, 'c> ProverSchema<'a, 'c> {
         let start = Instant::now();
         let mut transaction = self.0.start_transaction().await?;
 
-        let updated_rows = sqlx::query!(
-    r#"
-UPDATE t_prover_job_queue_cloud
-            SET f_updated_at = now(), f_job_status = $1, f_updated_by = 'server_finish_job'
-            WHERE f_id = $2 AND f_job_type = $3
-    "#,
-            ProverJobStatus::Done.to_number(),
-            job_id as i64,
-            ProverJobType::SingleProof.to_string()
-)
-            .execute(transaction.conn())
-            .await?
-            .rows_affected();
-
-        if updated_rows != 1 {
-            return Err(format_err!("Missing job for stored proof"));
-        }
+//         let updated_rows = sqlx::query!(
+//     r#"
+// UPDATE t_prover_job_queue_cloud
+//             SET f_updated_at = now(), f_job_status = $1, f_updated_by = 'server_finish_job'
+//             WHERE f_id = $2 AND f_job_type = $3
+//     "#,
+//             ProverJobStatus::Done.to_number(),
+//             job_id as i64,
+//             ProverJobType::SingleProof.to_string()
+// )
+//             .execute(transaction.conn())
+//             .await?
+//             .rows_affected();
+//
+//         if updated_rows != 1 {
+//             return Err(format_err!("Missing job for stored proof"));
+//         }
 
         sqlx::query!(
     r#"
