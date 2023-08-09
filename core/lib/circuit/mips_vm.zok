@@ -43,9 +43,12 @@ struct trace_record {
 
 struct mips_states {
 	trace_record states;
-	mem_hash mem_access;
-	mem_hash insn_access;
-	mem_hash newMemRoot;
+
+	bool read;
+	u32 read_addr;
+	bool write;
+	u32 write_val;
+	u32 write_addr;
 	bool illegal;
 }
 
@@ -81,7 +84,6 @@ def updateReg(mips_states mut states, u32 reg, u32 value) -> mips_states {
 }
 
 def handleJump(mips_states mut states, u32 link, u32 dest) -> mips_states {
-	log("handleJump {} {}", link, dest);
 	u32 prevPC = states.states.pc;
 	states.states.pc = states.states.nextPC;
 	states.states.nextPC = dest;
@@ -225,9 +227,7 @@ def hashPair(u8[32] a, u8[32] b)-> u8[32] {
     return res;
 }
 
-def getDataFromProof(mips_states mut states, memory_proof proof, u32 addr) -> (u32, u8[32]) {
-	assert (addr & 3 == 0);
-	
+def checkReadMem(memory_proof proof, u32 addr) -> u8[32] {
 	u8[32] leaf = proof.node[0].hash;
 
 	u32 mut path = addr >> 5;
@@ -240,34 +240,47 @@ def getDataFromProof(mips_states mut states, memory_proof proof, u32 addr) -> (u
 		node = hashPair(a1, a2);
 		path = path >> 1;
 	}
+	return node;
+}
 
-	// May need take Endian into consideration
+def getDataFromProof(mips_states mut states, memory_proof proof, u32 addr) -> u32 {
+	assert (addr & 3 == 0);
+
+	u8[32] leaf = proof.node[0].hash;
 	u32 shamt = addr & 0x0000001F;
+
 	u8[4] data = [
 		leaf[shamt],
 		leaf[shamt + 1],
 		leaf[shamt + 2],
 		leaf[shamt + 3]
 	];
-	log("data block ={}, addr={}", leaf, addr);
-	log("load data = {}", data);
-	return (u32_from_u8_array(data), node);
+	//log("data block ={}, addr={}", leaf, addr);
+	//log("load data = {}", data);
+	return u32_from_u8_array(data);
 }
 
 def getInstruction(mips_states mut states, u32 addr) -> (u32, mips_states) {
-	(u32, u8[32]) mut v = getDataFromProof(states, states.states.mem.insn_proof, addr);
-	states.insn_access.hash = v.1;
-	return (v.0, states);
+	u32 data = getDataFromProof(states, states.states.mem.insn_proof, addr);
+	assert(checkReadMem(states.states.mem.insn_proof, addr) == states.states.memRoot.hash);
+	return (data, states);
 }
 
 def getMemory(mips_states mut states, u32 addr) -> (u32, mips_states) {
-	(u32, u8[32]) mut v = getDataFromProof(states, states.states.mem.mem_proof, addr);
-	states.mem_access.hash = v.1;
-	return (v.0, states);
+	u32 data = getDataFromProof(states, states.states.mem.mem_proof, addr);
+	states.read = true;
+	states.read_addr = addr;
+	return (data, states);
 }
 
 def setMemory(mips_states mut states, u32 addr, u32 value) -> mips_states  {
-	assert (addr & 3 == 0);
+	states.write = true;
+	states.write_addr = addr;
+	states.write_val = value;
+	return states;
+}
+
+def updateMemory(mips_states mut states, u32 addr, u32 value) -> u8[32] {
 
 	u8[32] mut leaf = states.states.mem.mem_proof.node[0].hash;
 	u8[4] data = u32_to_u8_array(value);
@@ -292,9 +305,7 @@ def setMemory(mips_states mut states, u32 addr, u32 value) -> mips_states  {
 		path = path >> 1;
 	}
 
-	states.newMemRoot.hash = node;
-
-	return states;
+	return node;
 }
 
 struct preImageData {
@@ -363,16 +374,11 @@ def arith_shift_right(u32 val, u32 shamt) -> u32 {
 }
 
 def execute(u32 insn, u32 rs, u32 rt, u32 mem) -> u32 {
-	log("execute {}", insn);
+
 	u32 opcode = insn >> 26;
 	u32 mut func = insn & 0x0000003F;
 	u32 shamt = (insn >> 6) & 0x0000001F;
-
-	func = if opcode >= 8 && opcode < 0x0000000F {
-		0x00000018 + opcode
-	} else {
-		func
-	};
+	log("execute {} {} {} {} {}", insn, rs, rt, mem, shamt);
 
 	u32 slv = rs & 0x0000001F;
 	u32 lwl = (rs & 3) * 8;
@@ -380,25 +386,25 @@ def execute(u32 insn, u32 rs, u32 rt, u32 mem) -> u32 {
 	u32 lhu = 16 - (rs & 2) * 8;
 
 	return if opcode == 0 || (opcode >= 8 && opcode < 0x0000000F) {
-		if func < 0x00000020 {
+		if func < 0x00000020 && opcode == 0 {
 			func >= 8 ?  rs :  // jr/jalr/div + others
 				func == 0 ? shift_left(rt, shamt) :  // sll
 					func == 2 ? shift_right(rt, shamt) :  // srl
 						func == 3 ? arith_shift_right(rt, shamt) :  // sra
 							func == 4 ? shift_left(rt, slv):  // sllv
 								func == 6 ? shift_right(rt, slv):  // srlv
-									func == 7 ? arith_shift_right(rt, rs):  // srav
+									func == 7 ? arith_shift_right(rt, slv):  // srav
 										assert_unreached()
 		} else {
-			func == 0x00000020 || func == 0x00000021 ? rs + rt :  // add or addu
+			func == 0x00000020 || func == 0x00000021 || opcode == 8 || opcode == 9 ? rs + rt :  // add or addu
 				func == 0x00000022 || func == 0x00000023 ? rs - rt :  // sub or subu
-					func == 0x00000024 ? rs & rt :  // and
-						func == 0x00000025 ? rs | rt  :  // or
-							func == 0x00000026 ? rs ^ rt : // xor
+					func == 0x00000024 || opcode == 0x0000000C ? rs & rt :  // and
+						func == 0x00000025  || opcode == 0x0000000D ? rs | rt  :  // or
+							func == 0x00000026  || opcode == 0x0000000E ? rs ^ rt : // xor
 								func == 0x00000027 ? !(rs | rt) : // nor
-									func == 0x0000002A ? ((rs < rt && rt < 0x80000000) || (rs > rt && rs > 0x80000000) ||
+									func == 0x0000002A || opcode == 0x0000000A ? ((rs < rt && rt < 0x80000000) || (rs > rt && rs > 0x80000000) ||
 														  (rs > rt && rs == 0x80000000 && rt != 0) ? 1 : 0) : // slt
-										func ==0x0000002B ? (rs < rt ? 1 : 0) : // sltu
+										func ==0x0000002B || opcode == 0x0000000B ? (rs < rt ? 1 : 0) : // sltu
 											assert_unreached()
 		}
 	} else {
@@ -590,7 +596,7 @@ def doSysFcntl(mips_states mut states, u32 a0, u32 a1) -> mips_states
 //	sysFcntl     = 4055
 
 def handleSyscall(mips_states mut states) -> mips_states {
-	log("handleSyscall {}", states.states.regs[2]);
+	//log("handleSyscall {}", states.states.regs[2]);
 	u32 sysNum = states.states.regs[2];
 	u32 a0 = states.states.regs[4];
 	u32 a1 = states.states.regs[5];
@@ -709,10 +715,10 @@ def UpdateMemAndRegWithRt(mips_states mut states, u32 rtReg, u32 storeAddr, u32 
 }
 
 def handleOtherInsts(mips_states mut states, u32 insn, u32 opcode, u32 mut rs, u32 rdReg, u32 rtReg) -> mips_states {
-	u32 mut storeAddr = 0;
+	u32 mut storeAddr = 0xFFFFFFFF;
 	u32 mut mem = 0;
 	u32 mut rt = 0;
-    log("handleOtherInsts {}", insn);
+
 	// R-type or I-type (stores rt)
 	rt = if opcode == 0 || opcode == 0x0000001C {
 		// R-type (stores rd)
@@ -738,7 +744,6 @@ def handleOtherInsts(mips_states mut states, u32 insn, u32 opcode, u32 mut rs, u
 		}
 	};
 
-	log("handleOtherInsts1 {}", insn);
 	rs = if opcode >= 0x00000020 {
 		rs + SE::<16>(insn & 0x0000FFFF)
 	} else {
@@ -751,7 +756,6 @@ def handleOtherInsts(mips_states mut states, u32 insn, u32 opcode, u32 mut rs, u
 		(mem, states)
 	};
 
-	log("handleOtherInsts2 {}", insn);
 	u32 mem = v.0;
 	states = v.1;
 
@@ -760,10 +764,10 @@ def handleOtherInsts(mips_states mut states, u32 insn, u32 opcode, u32 mut rs, u
 	} else {
 		storeAddr
 	};
-	log("handleOtherInsts3 {}", insn);
+
 	u32 val = execute(insn, rs, rt, mem);
 	u32 fun = insn & 0x0000003F;
-	log("handleOtherInsts4 {}", insn);
+
 	return if opcode == 0 && fun >= 8 && fun < 0x0000001C {
 		if fun == 8 || fun == 9 { // jr/jalr
 			handleJump(states, fun == 9 ? rdReg : 0, rs)
@@ -836,12 +840,15 @@ def check_instruction(mips_states mut states, trace_record nextStates) -> mips_s
 	
 	states.states.cycle = states.states.cycle + 1;
 	assert(!states.illegal);
-	assert(states.states.memRoot == states.insn_access);
-	assert(states.states.memRoot == states.mem_access);
-	states.states.memRoot = states.newMemRoot;
+	log("read {} {}, write {}, {}: {}", states.read, states.read_addr, states.write, states.write_addr, states.write_val);
+	u8[32] root = states.read ? checkReadMem(states.states.mem.mem_proof, states.read_addr) : states.states.memRoot.hash;
+	log("proof {}", states.states.mem.mem_proof);
+	log("root {} {}", root, states.states.memRoot.hash);
+	assert(states.states.memRoot.hash == root);
+	states.states.memRoot.hash = states.write ? updateMemory(states, states.write_addr, states.write_val): states.states.memRoot.hash;
 	states.states.mem = nextStates.mem;
-	log("result {}", states.states);
-	log("next {}", nextStates);
+	log("regs {} {}", states.states.regs, nextStates.regs);
+	log("memRoot {} {}", states.states.memRoot, nextStates.memRoot);
 	assert(states.states == nextStates);
 	return states;
 }
@@ -853,19 +860,15 @@ def do_check<recordSize>(
 	mips_states mut states = mips_states{
 		states: trace[0],
 		illegal: false,
-		mem_access: mem_hash {
-			hash: [0;32]
-		},
-		insn_access: mem_hash {
-			hash: [0;32]
-		},
-		newMemRoot: trace[0].memRoot
+		read: false,
+		read_addr: 0,
+		write: false,
+		write_val: 0,
+		write_addr: 0
 	};
 
 	// check every instruction trace 
 	for u32 i in 1..recordSize {
-		states.newMemRoot = states.states.memRoot;
-		states.mem_access = states.states.memRoot;
 		states = check_instruction(states, trace[i]);
 	}
 
