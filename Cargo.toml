@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     # Binaries
     "core/bin/server",
+    "core/bin/prover",
 
     # Server micro-services
     "core/bin/witness_generator",

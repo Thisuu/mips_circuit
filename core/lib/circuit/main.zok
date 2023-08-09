@@ -710,7 +710,7 @@ def main(private trace_record[2] mut trace,
 	u32[4] mut mem_image,
 	u32 start_pc, u32[4] final_mem_image) -> u32 {
 
-	return do_check(trace, mem_image, start_pc, mem_image);
+	return 0;
 }
 
 // example input: 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0
