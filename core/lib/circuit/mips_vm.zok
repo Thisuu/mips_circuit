@@ -627,18 +627,18 @@ def handleSyscall(mips_states mut states) -> mips_states {
 }
 
 def u64_from_u32(u32 input, bool sign) -> u64 {
-	bool[32] u32_bits = [...u32_to_bits(input)];
-	bool[32] ext = [sign ? u32_bits[31] : false; 32];
+	bool[32] u32_bits = u32_to_bits(input);
+	bool[32] ext = [sign ? u32_bits[0] : false; 32];
     bool[64] bits = [
-        ...u32_bits,
-		...ext
+		...ext,
+		...u32_bits
     ];
     return u64_from_bits(bits);
 }
 
 def u32_from_u64(u64 input, bool high) -> u32 {
 	bool[64] u64_bits = [...u64_to_bits(input)];
-    return u32_from_bits(high ? u64_bits[32..64] : u64_bits[0..32]);
+    return u32_from_bits(high ? u64_bits[0..32] : u64_bits[32..64]);
 }
 
 def sign_div(u32 mut rs, u32 mut rt, bool rem) -> u32 {
@@ -861,6 +861,7 @@ def check_instruction(mips_states mut states, trace_record nextStates) -> mips_s
 			states.updateRd, states.rd, states.rdVal);
 	u8[32] root = states.read ? checkReadMem(states.states.mem.mem_proof, states.read_addr) : states.states.memRoot.hash;
 	//log("proof {}", states.states.mem.mem_proof);
+	log("lo {} {}, hi {} {}", states.states.lo, nextStates.lo, states.states.hi, nextStates.hi);
 	log("root {} {}", root, states.states.memRoot.hash);
 	assert(states.states.memRoot.hash == root);
 	states.states.memRoot.hash = states.write ? updateMemory(states, states.write_addr, states.write_val): states.states.memRoot.hash;
