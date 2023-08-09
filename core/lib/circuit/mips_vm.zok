@@ -49,6 +49,9 @@ struct mips_states {
 	bool write;
 	u32 write_val;
 	u32 write_addr;
+	bool updateRd;
+	u32 rd;
+	u32 rdVal;
 	bool illegal;
 }
 
@@ -378,7 +381,7 @@ def execute(u32 insn, u32 rs, u32 rt, u32 mem) -> u32 {
 	u32 opcode = insn >> 26;
 	u32 mut func = insn & 0x0000003F;
 	u32 shamt = (insn >> 6) & 0x0000001F;
-	log("execute {} {} {} {} {}", insn, rs, rt, mem, shamt);
+	log("execute insn:{} rs:{} rt:{} mem:{} shamt:{}", insn, rs, rt, mem, shamt);
 
 	u32 slv = rs & 0x0000001F;
 	u32 lwl = (rs & 3) * 8;
@@ -457,12 +460,12 @@ def execute(u32 insn, u32 rs, u32 rt, u32 mem) -> u32 {
 def handleRd(mips_states mut states, u32 rd, u32 val, bool cond) -> mips_states {
 	states.states.pc = states.states.nextPC;
 	states.states.nextPC = states.states.nextPC + 4;
-	return if rd != 0 && cond {
-		updateReg(states, rd, val)
-	} else {
-		states
-	};
+	states.updateRd = rd!=0 && cond;
+	states.rd = rd;
+	states.rdVal = val;
+	return states;
 }
+
 def assert_unreached_states(mips_states mut states) -> mips_states {
 	states.illegal = true;
 	return states;
@@ -766,6 +769,7 @@ def handleOtherInsts(mips_states mut states, u32 insn, u32 opcode, u32 mut rs, u
 	};
 
 	u32 val = execute(insn, rs, rt, mem);
+	log("execute result: {}", val);
 	u32 fun = insn & 0x0000003F;
 
 	return if opcode == 0 && fun >= 8 && fun < 0x0000001C {
@@ -811,7 +815,8 @@ def handleRItypeInsts(mips_states mut states, u32 insn, u32 opcode) -> mips_stat
 	rdReg = opcode == 0 || opcode == 0x0000001C ? (insn >> 11) & 0x0000001F  // R-type (stores rd)
 	                                            : rtReg;
 
-	return if (opcode >= 4 && opcode <= 8) || opcode == 1 {
+	log("insn: {}, opcode: {}, rs: {}, rdReg: {}, rtReg: {}", insn, opcode, rs, rdReg, rtReg);
+	return if (opcode >= 4 && opcode < 8) || opcode == 1 {
 		handleBranch(states, opcode, insn, rtReg, rs)
 	} else {
 		handleOtherInsts(states, insn, opcode, rs, rdReg, rtReg)
@@ -840,9 +845,13 @@ def check_instruction(mips_states mut states, trace_record nextStates) -> mips_s
 	
 	states.states.cycle = states.states.cycle + 1;
 	assert(!states.illegal);
-	log("read {} {}, write {}, {}: {}", states.read, states.read_addr, states.write, states.write_addr, states.write_val);
+
+	states = states.updateRd ? updateReg(states, states.rd, states.rdVal) : states;
+	log("read {} {}, write {}, {}: {}, rd {} {} {}", states.read, states.read_addr,
+	        states.write, states.write_addr, states.write_val,
+			states.updateRd, states.rd, states.rdVal);
 	u8[32] root = states.read ? checkReadMem(states.states.mem.mem_proof, states.read_addr) : states.states.memRoot.hash;
-	log("proof {}", states.states.mem.mem_proof);
+	//log("proof {}", states.states.mem.mem_proof);
 	log("root {} {}", root, states.states.memRoot.hash);
 	assert(states.states.memRoot.hash == root);
 	states.states.memRoot.hash = states.write ? updateMemory(states, states.write_addr, states.write_val): states.states.memRoot.hash;
@@ -864,11 +873,18 @@ def do_check<recordSize>(
 		read_addr: 0,
 		write: false,
 		write_val: 0,
-		write_addr: 0
+		write_addr: 0,
+		updateRd: false,
+		rd: 0,
+		rdVal: 0
 	};
 
 	// check every instruction trace 
 	for u32 i in 1..recordSize {
+		states.illegal = false;
+		states.read = false;
+		states.write = false;
+		states.updateRd = false;
 		states = check_instruction(states, trace[i]);
 	}
 
