@@ -3,7 +3,7 @@ use rand_0_8::SeedableRng;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{BufReader, Cursor};
 use std::path::Path;
 use zokrates_ark::Ark;
 use zokrates_ast::ir;
@@ -82,9 +82,12 @@ fn generate<
 ) -> Result<String, String> {
     vlog::info!("Generating proof...");
 
+    let t = "true".to_string();
     // deserialize witness
     let witness_str = args.get(&"witness".to_string()).unwrap().clone();
-    let mut buff = BufReader::new(witness_str.as_bytes());
+    vlog::info!("witness_str:{}\n", witness_str);
+    let witness_bytes = hex::decode(witness_str).unwrap();
+    let mut buff = Cursor::new(witness_bytes);
     let witness = Witness::read(buff).map_err(|why| format!("Could not load witness: {:?}", why))?;
 
     let pk_path = Path::new(args.get(&"proving-key-path".to_string()).unwrap());
@@ -101,13 +104,13 @@ fn generate<
 
     let proof = B::generate_proof(program, witness, pk_reader, &mut rng);
 
-    let proof =
+    let proof_str =
         serde_json::to_string_pretty(&TaggedProof::<T, S>::new(proof.proof, proof.inputs)).unwrap();
 
     let verbose = matches!(args.get(&"verbose".to_string()).unwrap_or(&"true".to_string()), t);
     if verbose {
-        vlog::info!("Proof:\n{}", proof);
+        vlog::info!("Proof:\n{}", proof_str);
     }
 
-    Ok(proof)
+    Ok(proof_str)
 }

@@ -32,6 +32,7 @@ types = { path = "../types", version = "1.0" }
 vlog = { path = "../vlog", version = "1.0" }
 rand_0_4 = { version = "0.4", package = "rand" }
 rand_0_8 = { version = "0.8", package = "rand" }
+hex = "0.4.2"
 
 # Backends
 zokrates_proof_systems = { version = "0.1", path = "../../../zokrates_proof_systems", default-features = false }
