@@ -259,7 +259,7 @@ def getDataFromProof(mips_states mut states, memory_proof proof, u32 addr) -> u3
 		leaf[shamt + 3]
 	];
 	//log("data block ={}, addr={}", leaf, addr);
-	//log("load data = {}", data);
+	log("load data = {}", data);
 	return u32_from_u8_array(data);
 }
 
@@ -348,35 +348,41 @@ def assert_unreached() -> u32 {
 	return 0;
 }
 
-def shift_right(u32 val, u32 shamt)-> u32 {
+def shift_left(u32 val, u32 shamt)-> u32 {
 	assert(shamt < 32);
 	bool[32] mut bits = u32_to_bits(val);
 	for u32 i in 0..32 {
 		u32 index = i + shamt < 32 ? i + shamt : 31;
 		bits[i] = i + shamt < 32 ? bits[index] : false;
 	}
+
+	log("shl {} {} {}", val, shamt, u32_from_bits(bits));
 	return u32_from_bits(bits);
 }
 
-def shift_left(u32 val, u32 shamt)-> u32 {
+def shift_right(u32 val, u32 shamt)-> u32 {
 	assert(shamt < 32);
-	bool[32] mut bits = u32_to_bits(val);
+	bool[32] bits = u32_to_bits(val);
+    bool[32] mut res = [false;32];
 	for u32 i in 0..32 {
-		u32 index = i >= shamt ? i - shamt : 0;
-		bits[i] = i < shamt ? false : bits[index];
+		u32 index = i >= shamt? i - shamt : 0;
+		res[i] = i < shamt ? false : bits[index];
 	}
-	return u32_from_bits(bits);
+
+	log("shr {} {} {}", val, shamt, u32_from_bits(res));
+	return u32_from_bits(res);
 }
 
 def arith_shift_right(u32 val, u32 shamt) -> u32 {
 	assert(shamt < 32);
-	bool[32] mut bits = u32_to_bits(val);
+	bool[32] bits = u32_to_bits(val);
+    bool[32] mut res = [false;32];
 	for u32 i in 0..32 {
-		u32 index = i + shamt < 32 ? i + shamt : 31;
-		bits[i] = bits[index];
+		u32 index = i >= shamt ? i - shamt : 0;
+		res[i] = bits[index];
 	}
-
-	return u32_from_bits(bits);
+	log("sar {} {} {}", val, shamt, u32_from_bits(res));
+	return u32_from_bits(res);
 }
 
 def execute(u32 insn, u32 rs, u32 rt, u32 mem) -> u32 {
