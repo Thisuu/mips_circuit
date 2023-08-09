@@ -726,7 +726,7 @@ def UpdateMemAndRegWithRt(mips_states mut states, u32 rtReg, u32 storeAddr, u32 
 	return handleRd(states, rdReg, val, true);
 }
 
-def handleOtherInsts(mips_states mut states, u32 insn, u32 opcode, u32 mut rs, u32 rdReg, u32 rtReg) -> mips_states {
+def handleOtherInsts(mips_states mut states, u32 insn, u32 opcode, u32 mut rs, u32 mut rdReg, u32 rtReg) -> mips_states {
 	u32 mut storeAddr = 0xFFFFFFFF;
 	u32 mut mem = 0;
 	u32 mut rt = 0;
@@ -775,6 +775,12 @@ def handleOtherInsts(mips_states mut states, u32 insn, u32 opcode, u32 mut rs, u
 		rs & 0xFFFFFFFC
 	} else {
 		storeAddr
+	};
+
+	rdReg = if opcode >= 0x00000028 && opcode != 0x00000030 {
+		0
+	} else {
+		rdReg
 	};
 
 	u32 val = execute(insn, rs, rt, mem);
