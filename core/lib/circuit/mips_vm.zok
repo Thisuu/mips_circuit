@@ -414,8 +414,8 @@ def execute(u32 insn, u32 rs, u32 rt, u32 mem) -> u32 {
 						func == 0x00000025  || opcode == 0x0000000D ? rs | rt  :  // or
 							func == 0x00000026  || opcode == 0x0000000E ? rs ^ rt : // xor
 								func == 0x00000027 ? !(rs | rt) : // nor
-									func == 0x0000002A || opcode == 0x0000000A ? ((rs < rt && rt < 0x80000000) || (rs > rt && rs > 0x80000000) ||
-														  (rs > rt && rs == 0x80000000 && rt != 0) ? 1 : 0) : // slt
+									func == 0x0000002A || opcode == 0x0000000A ? ((rs < rt && rt < 0x80000000) || (rs > rt && rs >= 0x80000000) ||
+														  (rs < rt && rs == 0x80000000) ? 1 : 0) : // slt
 										func ==0x0000002B || opcode == 0x0000000B ? (rs < rt ? 1 : 0) : // sltu
 											assert_unreached()
 		}
