@@ -332,9 +332,12 @@ def do_clo(u32 func, u32 mut rs) -> u32 {
 	};
 
 	u32 mut ret = 0;
-	for u32 i in 0 .. 32 {
-		rs = rs << 1;
-		ret = rs & 0x80000000 == 0 && ret == 0 ? i : ret;
+	bool mut break = false;
+
+	for u32 i in 0 .. 33 {
+		ret = rs & 0x80000000 == 0 ? i : ret;
+		break = break || rs & 0x80000000 == 0;
+		rs = break ? 0x80000000 : rs << 1;
 	}
 
 	return ret;
