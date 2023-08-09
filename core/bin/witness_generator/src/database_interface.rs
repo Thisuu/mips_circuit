@@ -36,7 +36,7 @@ pub trait DatabaseInterface: Send + Sync + Clone + 'static {
         connection: &mut StorageProcessor<'_>,
         job_id: i32,
         block_number: BlockNumber,
-        proof: &StoredProof,
+        proof: String,
     ) -> anyhow::Result<()>;
 
     async fn store_witness(

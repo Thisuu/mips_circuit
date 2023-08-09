@@ -62,9 +62,9 @@ impl DatabaseInterface for Database {
         connection: &mut StorageProcessor<'_>,
         job_id: i32,
         block_number: BlockNumber,
-        proof: &StoredProof,
+        proof_str: String,
     ) -> anyhow::Result<()> {
-        let proof_value = serde_json::to_value(proof).unwrap();
+        let proof_value = serde_json::from_str(proof_str.as_str()).unwrap();
         connection
             .prover_schema()
             .store_proof(job_id, block_number, proof_value)
