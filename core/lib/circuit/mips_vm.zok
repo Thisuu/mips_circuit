@@ -450,11 +450,11 @@ def execute(u32 insn, u32 rs, u32 rt, u32 mem) -> u32 {
 						opcode == 0x00000029 ? // sh
 							(mem & (0xFFFFFFFF ^ shift_left(0x0000FFFF, lhu))) | shift_left(rt & 0x0000FFFF, lhu) :
 							opcode == 0x0000002A ? // swl
-								(mem & shift_left(0xFFFFFFFF, lwl)) | shift_left(rt, lwl) :
+								(mem & !shift_right(0xFFFFFFFF, lwl)) | shift_right(rt, lwl) :
 								opcode == 0x0000002B ? // sw
 									rt :
 									opcode == 0x0000002E ? // swr
-										(mem & shift_left(0xFFFFFFFF, lbu)) | shift_left(rt, lbu) :
+										(mem & !shift_left(0xFFFFFFFF, lbu)) | shift_left(rt, lbu) :
 										opcode == 0x00000030 ? // ll
 											mem :
 											opcode == 0x00000038 ? // sc
