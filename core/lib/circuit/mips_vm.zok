@@ -343,11 +343,6 @@ def do_clo(u32 func, u32 mut rs) -> u32 {
 	return ret;
 }
 
-def assert_unreached() -> u32 {
-	//assert(false);
-	return 0;
-}
-
 def shift_left(u32 val, u32 shamt)-> u32 {
 	assert(shamt < 32);
 	bool[32] mut bits = u32_to_bits(val);
@@ -385,7 +380,12 @@ def arith_shift_right(u32 val, u32 shamt) -> u32 {
 	return u32_from_bits(res);
 }
 
-def execute(u32 insn, u32 rs, u32 rt, u32 mem) -> u32 {
+def assert_unreached_states(mips_states mut states) -> mips_states {
+	states.illegal = true;
+	return states;
+}
+
+def execute(mips_states states, u32 insn, u32 rs, u32 rt, u32 mem) -> (u32, mips_states) {
 
 	u32 opcode = insn >> 26;
 	u32 mut func = insn & 0x0000003F;
@@ -399,67 +399,68 @@ def execute(u32 insn, u32 rs, u32 rt, u32 mem) -> u32 {
 
 	return if opcode == 0 || (opcode >= 8 && opcode < 0x0000000F) {
 		if func < 0x00000020 && opcode == 0 {
-			func >= 8 ?  rs :  // jr/jalr/div + others
-				func == 0 ? shift_left(rt, shamt) :  // sll
-					func == 2 ? shift_right(rt, shamt) :  // srl
-						func == 3 ? arith_shift_right(rt, shamt) :  // sra
-							func == 4 ? shift_left(rt, slv):  // sllv
-								func == 6 ? shift_right(rt, slv):  // srlv
-									func == 7 ? arith_shift_right(rt, slv):  // srav
-										assert_unreached()
+			func >= 8 ?  (rs, states) :  // jr/jalr/div + others
+				func == 0 ? (shift_left(rt, shamt), states) :  // sll
+					func == 2 ? (shift_right(rt, shamt), states) :  // srl
+						func == 3 ? (arith_shift_right(rt, shamt), states) :  // sra
+							func == 4 ? (shift_left(rt, slv), states):  // sllv
+								func == 6 ? (shift_right(rt, slv), states):  // srlv
+									func == 7 ? (arith_shift_right(rt, slv), states):  // srav
+										(0, assert_unreached_states(states))
 		} else {
-			func == 0x00000020 || func == 0x00000021 || opcode == 8 || opcode == 9 ? rs + rt :  // add or addu
-				func == 0x00000022 || func == 0x00000023 ? rs - rt :  // sub or subu
-					func == 0x00000024 || opcode == 0x0000000C ? rs & rt :  // and
-						func == 0x00000025  || opcode == 0x0000000D ? rs | rt  :  // or
-							func == 0x00000026  || opcode == 0x0000000E ? rs ^ rt : // xor
-								func == 0x00000027 ? !(rs | rt) : // nor
-									func == 0x0000002A || opcode == 0x0000000A ? ((rs < rt && rt < 0x80000000) || (rs > rt && rs >= 0x80000000) ||
-														  (rs < rt && rs == 0x80000000) ? 1 : 0) : // slt
-										func ==0x0000002B || opcode == 0x0000000B ? (rs < rt ? 1 : 0) : // sltu
-											assert_unreached()
+			func == 0x00000020 || func == 0x00000021 || opcode == 8 || opcode == 9 ? (rs + rt, states) :  // add or addu
+				func == 0x00000022 || func == 0x00000023 ? (rs - rt, states) :  // sub or subu
+					func == 0x00000024 || opcode == 0x0000000C ? (rs & rt, states) :  // and
+						func == 0x00000025  || opcode == 0x0000000D ? (rs | rt, states) :  // or
+							func == 0x00000026  || opcode == 0x0000000E ? (rs ^ rt, states) : // xor
+								func == 0x00000027 ? (!(rs | rt), states) : // nor
+									func == 0x0000002A || opcode == 0x0000000A ? (
+										(rs < rt && rt < 0x80000000) || (rs > rt && rs >= 0x80000000) ||
+											(rs < rt && rs == 0x80000000) ? 1u32 : 0u32, states) : // slt
+										func ==0x0000002B || opcode == 0x0000000B ? (rs < rt ? (1u32, states) : (0u32, states)) : // sltu
+											(0, assert_unreached_states(states))
 		}
 	} else {
 		if opcode == 0x0000000F {
-			rt << 16  // lui
+			(rt << 16, states)  // lui
 		} else {
 			if opcode == 0x0000001C {  // SPECIAL2
-				func == 2 ? rs * rt :   // TODO uint32(int32(rs) * int32(rt))
-					func == 0x00000020 || func == 0x00000021 ? do_clo(func, rs) :    //clo
-						0    // TOFIX panic
+				func == 2 ? (rs * rt, states) :   // TODO uint32(int32(rs) * int32(rt))
+					func == 0x00000020 || func == 0x00000021 ? (do_clo(func, rs), states) :    //clo
+						(0, assert_unreached_states(states))
 			} else {
 				if opcode < 0x00000028 {
 					opcode == 0x00000020 ?  // lb
-						SE::<8>(shift_right(mem, lbu) & 0x000000FF) :
+						(SE::<8>(shift_right(mem, lbu) & 0x000000FF), states) :
 						opcode == 0x00000021 ? // lh
-							SE::<16>(shift_right(mem, lhu) & 0x0000FFFF) :
+							(SE::<16>(shift_right(mem, lhu) & 0x0000FFFF), states) :
 							opcode == 0x00000022 ? // lwl
-								(rt & !shift_left(0xFFFFFFFF, lwl)) | shift_left(mem, lwl) :
+								((rt & !shift_left(0xFFFFFFFF, lwl)) | shift_left(mem, lwl), states) :
 								opcode == 0x00000023 ? // lw
-									mem :
+									(mem, states) :
 									opcode == 0x00000024 ? // lbu
-										shift_right(mem, lbu) & 0x000000FF :
+										(shift_right(mem, lbu) & 0x000000FF, states) :
 										opcode == 0x00000025 ? // lhu
-											shift_right(mem, lhu) & 0x0000FFFF :
+											(shift_right(mem, lhu) & 0x0000FFFF, states) :
 											opcode == 0x00000026 ? // lwr
-												(rt & !(shift_right(0xFFFFFFFF, lbu))) | shift_right(mem, lbu) :
-												assert_unreached()
+												((rt & !(shift_right(0xFFFFFFFF, lbu))) | shift_right(mem, lbu), states) :
+												(0, assert_unreached_states(states))
 				} else {
 					opcode == 0x00000028 ?  // sb
-						(mem & (0xFFFFFFFF ^ shift_left(0x000000FF, lbu))) | shift_left(rt & 0x000000FF, lbu) :
+						((mem & (0xFFFFFFFF ^ shift_left(0x000000FF, lbu))) | shift_left(rt & 0x000000FF, lbu), states) :
 						opcode == 0x00000029 ? // sh
-							(mem & (0xFFFFFFFF ^ shift_left(0x0000FFFF, lhu))) | shift_left(rt & 0x0000FFFF, lhu) :
+							((mem & (0xFFFFFFFF ^ shift_left(0x0000FFFF, lhu))) | shift_left(rt & 0x0000FFFF, lhu), states) :
 							opcode == 0x0000002A ? // swl
-								(mem & !shift_right(0xFFFFFFFF, lwl)) | shift_right(rt, lwl) :
+								((mem & !shift_right(0xFFFFFFFF, lwl)) | shift_right(rt, lwl), states) :
 								opcode == 0x0000002B ? // sw
-									rt :
+									(rt, states) :
 									opcode == 0x0000002E ? // swr
-										(mem & !shift_left(0xFFFFFFFF, lbu)) | shift_left(rt, lbu) :
+										((mem & !shift_left(0xFFFFFFFF, lbu)) | shift_left(rt, lbu), states) :
 										opcode == 0x00000030 ? // ll
-											mem :
+											(mem, states) :
 											opcode == 0x00000038 ? // sc
-												rt :
-												assert_unreached()
+												(rt, states) :
+												(0, assert_unreached_states(states))
 				}
 			}
 		}
@@ -472,11 +473,6 @@ def handleRd(mips_states mut states, u32 rd, u32 val, bool cond) -> mips_states 
 	states.updateRd = rd!=0 && cond;
 	states.rd = rd;
 	states.rdVal = val;
-	return states;
-}
-
-def assert_unreached_states(mips_states mut states) -> mips_states {
-	states.illegal = true;
 	return states;
 }
 
@@ -528,8 +524,8 @@ def doFdPreImageRead(mips_states mut states, u32 a1, u32 a2) -> mips_states {
 	u32 mem = v.0;
 	states = v.1;
 	preImageData mut data = getPreImage(states);
-	data.dataLen = data.dataLen > 4 - align ? 4 - align  : data.dataLen;
-	data.dataLen = a2 < data.dataLen ? a2  : data.dataLen;
+	data.dataLen = data.dataLen > 4 - align ? 4 - align : data.dataLen;
+	data.dataLen = a2 < data.dataLen ? a2 : data.dataLen;
 	u8[4] mut outMem = u32_to_u8_array(mem);
 
 	for u32 i in 0..4 {
@@ -593,9 +589,9 @@ def doSysFcntl(mips_states mut states, u32 a0, u32 a1) -> mips_states
 	// args: a0 = fd, a1 = cmd
 	u32 v0 = (a1 == 3) ? (a0 == 0 || a0 == 3 || a0 == 5) ?  0 :
 							(a0 == 1 || a0 == 2 || a0 == 4 || a0 == 6) ? 1 : 0xFFFFFFFF
-					   : 0xFFFFFFFF;
+					 : 0xFFFFFFFF;
 	u32 v1 = (a1 == 3) ? (a0 <= 6) ? 0 : 9
-	                   : 0x00000016;
+	                : 0x00000016;
 	return updateSysRet(states, v0, v1);
 }
 
@@ -622,7 +618,7 @@ def handleSyscall(mips_states mut states) -> mips_states {
 				  sysNum == 4246 ? doSysExitGroup(states, a0) :
 					sysNum == 4003 ? doSysRead(states, a0, a1, a2) :
 					  sysNum == 4004 ? doSysWrite(states, a0, a1, a2) :
-						sysNum == 4005 ? doSysFcntl(states, a0, a1) :
+						sysNum == 4055 ? doSysFcntl(states, a0, a1) :
 						  assert_unreached_states(states);
 }
 
@@ -783,7 +779,10 @@ def handleOtherInsts(mips_states mut states, u32 insn, u32 opcode, u32 mut rs, u
 		rdReg
 	};
 
-	u32 val = execute(insn, rs, rt, mem);
+	
+	(u32, mips_states) mut v = execute(states, insn, rs, rt, mem);
+	u32 val = v.0;
+	states = v.1;
 	log("execute result: {}", val);
 	u32 fun = insn & 0x0000003F;
 
@@ -828,7 +827,7 @@ def handleRItypeInsts(mips_states mut states, u32 insn, u32 opcode) -> mips_stat
 
 	rs = states.states.regs[(insn >> 21) & 0x0000001F];
 	rdReg = opcode == 0 || opcode == 0x0000001C ? (insn >> 11) & 0x0000001F  // R-type (stores rd)
-	                                            : rtReg;
+	                                         : rtReg;
 
 	log("insn: {}, opcode: {}, rs: {}, rdReg: {}, rtReg: {}", insn, opcode, rs, rdReg, rtReg);
 	return if (opcode >= 4 && opcode < 8) || opcode == 1 {
