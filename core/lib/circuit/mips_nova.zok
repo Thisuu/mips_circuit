@@ -4,8 +4,9 @@ import "utils/casts/u32_to_bits";
 import "utils/casts/u32_from_bits";
 import "utils/casts/u8_to_bits";
 import "utils/casts/u8_from_bits";
-from "hashes/keccak/256bit" import main as kecca256;
+//from "hashes/keccak/256bit" import main as kecca256;
 //import "hashes/pedersen/512bitBool" as pedersen;
+import "hashes/blake2/blake2s" as blake2s;
 
 
 struct mem_hash {
@@ -151,13 +152,42 @@ def handleBranch(mips_states mut states, u32 opcode, u32 insn, u32 rtReg, u32 rs
 }
 
 def hashPair(u8[32] a, u8[32] b)-> u8[32] {
-	u8[64] c = [
-		...a,
-		...b
-	];
-	return kecca256(c);
-}
+    u32[1][16] mut e = [[0;16]];
+    e[0] = [
+        u32_from_u8_array(a[0..4]),
+        u32_from_u8_array(a[4..8]),
+        u32_from_u8_array(a[8..12]),
+        u32_from_u8_array(a[12..16]),
+        u32_from_u8_array(a[16..20]),
+        u32_from_u8_array(a[20..24]),
+        u32_from_u8_array(a[24..28]),
+        u32_from_u8_array(a[28..32]),
+        u32_from_u8_array(b[0..4]),
+        u32_from_u8_array(b[4..8]),
+        u32_from_u8_array(b[8..12]),
+        u32_from_u8_array(b[12..16]),
+        u32_from_u8_array(b[16..20]),
+        u32_from_u8_array(b[20..24]),
+        u32_from_u8_array(b[24..28]),
+        u32_from_u8_array(b[28..32])
+    ];
 
+    u32[8] result = blake2s(e);
+
+    u8[32] res = [
+        ...u32_to_u8_array(result[0]),
+        ...u32_to_u8_array(result[1]),
+        ...u32_to_u8_array(result[2]),
+        ...u32_to_u8_array(result[3]),
+        ...u32_to_u8_array(result[4]),
+        ...u32_to_u8_array(result[5]),
+        ...u32_to_u8_array(result[6]),
+        ...u32_to_u8_array(result[7])
+    ];
+
+	log("hash {}, {} = {}", a, b , res);
+    return res;
+}
 def checkReadMem(memory_proof proof, u32 addr) -> u8[32] {
 	u8[32] leaf = proof.node[0].hash;
 
@@ -805,9 +835,7 @@ def check_instruction(mips_states mut states, trace_record nextStates) -> mips_s
 	return states;
 }
 
-def do_check<recordSize>(
-	trace_record cur, trace_record[recordSize] mut trace) -> trace_record {
-	u32 mut ret = 0;
+def main(public trace_record cur, private trace_record next) -> trace_record {
 
 	mips_states mut states = mips_states{
 		states: cur,
@@ -822,19 +850,6 @@ def do_check<recordSize>(
 		rdVal: 0
 	};
 
-	// check every instruction trace 
-	for u32 i in 0..recordSize {
-		states.illegal = false;
-		states.read = false;
-		states.write = false;
-		states.updateRd = false;
-		states = check_instruction(states, trace[i]);
-	}
-
+	states = check_instruction(states, next);
 	return states.states;
-}
-
-def main(public trace_record cur, private trace_record[1] next) -> trace_record {
-
-	return do_check(cur, next);
 }
