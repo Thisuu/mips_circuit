@@ -7,21 +7,12 @@ import "utils/casts/u8_from_bits";
 //from "hashes/keccak/256bit" import main as kecca256;
 import "hashes/pedersen/512bitBool" as pedersen;
 
-
 struct mem_hash {
 	u8[32] hash;
 }
 
 struct memory_proof {
 	mem_hash[28] node;
-}
-
-struct memory_wit {
-	memory_proof insn_proof;
-	memory_proof mem_proof;
-	u8[32] newpreImageKey;
-	u32 newpreImageOffset;
-	//u8[16] PreimageValue;
 }
 
 struct trace_record {
@@ -31,14 +22,13 @@ struct trace_record {
 	u32 lo;
 	u32 hi;
 	u32[32] regs;
-	u8[32] preImageKey;
-	u32 preImageOffset;
 	u32 heap;
 	u8 exitCode;
 	bool exited;
 	mem_hash memRoot;
 
-	memory_wit mem;
+	memory_proof insn_proof;
+	memory_proof mem_proof;
 }
 
 struct mips_states {
@@ -52,6 +42,7 @@ struct mips_states {
 	bool updateRd;
 	u32 rd;
 	u32 rdVal;
+	bool updateRoot;
 	bool illegal;
 }
 
@@ -264,13 +255,13 @@ def getDataFromProof(mips_states mut states, memory_proof proof, u32 addr) -> u3
 }
 
 def getInstruction(mips_states mut states, u32 addr) -> (u32, mips_states) {
-	u32 data = getDataFromProof(states, states.states.mem.insn_proof, addr);
-	assert(checkReadMem(states.states.mem.insn_proof, addr) == states.states.memRoot.hash);
+	u32 data = getDataFromProof(states, states.states.insn_proof, addr);
+	assert(checkReadMem(states.states.insn_proof, addr) == states.states.memRoot.hash);
 	return (data, states);
 }
 
 def getMemory(mips_states mut states, u32 addr) -> (u32, mips_states) {
-	u32 data = getDataFromProof(states, states.states.mem.mem_proof, addr);
+	u32 data = getDataFromProof(states, states.states.mem_proof, addr);
 	states.read = true;
 	states.read_addr = addr;
 	return (data, states);
@@ -285,7 +276,7 @@ def setMemory(mips_states mut states, u32 addr, u32 value) -> mips_states  {
 
 def updateMemory(mips_states mut states, u32 addr, u32 value) -> u8[32] {
 
-	u8[32] mut leaf = states.states.mem.mem_proof.node[0].hash;
+	u8[32] mut leaf = states.states.mem_proof.node[0].hash;
 	u8[4] data = u32_to_u8_array(value);
 	u32 shamt = addr & 0x0000001F;
 
@@ -301,27 +292,14 @@ def updateMemory(mips_states mut states, u32 addr, u32 value) -> u8[32] {
 	u8[32] mut node = leaf;
 
 	for u32 i in 1 .. 28 {
-		u8[32] a1 =  (path & 1) == 0 ? node : states.states.mem.mem_proof.node[i].hash;
-		u8[32] a2 =  (path & 1) == 0 ? states.states.mem.mem_proof.node[i].hash : node;
+		u8[32] a1 =  (path & 1) == 0 ? node : states.states.mem_proof.node[i].hash;
+		u8[32] a2 =  (path & 1) == 0 ? states.states.mem_proof.node[i].hash : node;
 
 		node = hashPair(a1, a2);
 		path = path >> 1;
 	}
 
 	return node;
-}
-
-struct preImageData {
-	u8[32] data;
-	u32 dataLen;
-}
-
-def getPreImage(mips_states states)-> preImageData {
-	// TODO
-	return preImageData {
-		data:  [0;32],
-		dataLen: 5
-	};
 }
 
 def do_clo(u32 func, u32 mut rs) -> u32 {
@@ -508,67 +486,18 @@ def doSysExitGroup(mips_states mut states, u32 a0) -> mips_states
 //	fdStdin         = 0
 //	fdStdout        = 1
 //	fdStderr        = 2
-//	fdHintRead      = 3
-//	fdHintWrite     = 4
-//	fdPreimageRead  = 5
-//	fdPreimageWrite = 6
 
 //	MipsEBADF  = 0x9
 //	MipsEINVAL = 0x16
 
-def doFdPreImageRead(mips_states mut states, u32 a1, u32 a2) -> mips_states {
-	assert (a2 < 5);
-	u32 align = a1 & 3;
-	u32 effAddr = a1 & 0xFFFFFFFC;
-	(u32, mips_states) mut v = getMemory(states, effAddr);
-	u32 mem = v.0;
-	states = v.1;
-	preImageData mut data = getPreImage(states);
-	data.dataLen = data.dataLen > 4 - align ? 4 - align : data.dataLen;
-	data.dataLen = a2 < data.dataLen ? a2 : data.dataLen;
-	u8[4] mut outMem = u32_to_u8_array(mem);
-
-	for u32 i in 0..4 {
-		u32 index = i >= align && i < align + data.dataLen ? i - align : 0;
-		outMem[i] = i >= align && i < align + data.dataLen ? data.data[index] : outMem[i];
-	}
-
-	states = setMemory(states, effAddr, u32_from_u8_array(outMem));
-
-	states.states.preImageOffset = states.states.preImageOffset + data.dataLen;
-	return updateSysRet(states, data.dataLen, 0);
-}
-
 def doSysRead(mips_states mut states, u32 a0, u32 a1, u32 a2) -> mips_states {
 	// args: a0 = fd, a1 = addr, a2 = count
 	// returns: v0 = read, v1 = err code
-	u32 v0 = a0 == 3 ? a2 :           // fdHintRead
-				a0 == 0 ? 0 :         // fdStdin
+	u32 v0 = a0 == 0 ? 0 :         // fdStdin
 					0xFFFFFFFF;       // default
-	u32 v1 = a0 == 3 || a0 == 0 ? 0 : 9;
+	u32 v1 = a0 == 0 ? 0 : 9;
 
-	return a0 == 5 ? doFdPreImageRead(states, a1, a2) :
-					 updateSysRet(states, v0, v1);
-}
-
-def doFdPreimageWrite(mips_states mut states, u32 a1, u32 mut a2) -> mips_states {
-	assert (a2 < 5);
-	u32 align = a1 & 3;
-	u32 effAddr = a1 & 0xFFFFFFFC;
-	(u32, mips_states) mut v = getMemory(states, effAddr);
-	u32 mem = v.0;
-	states = v.1;
-	u8[32] mut key = states.states.preImageKey;
-	u8[4] tmp = u32_to_u8_array(mem);
-
-	for u32 i in 0..32 {
-		u32 index = i < 32 - a2 ? 0 : i + a2 - 32;
-		key[i] = i < 32 - a2 ? key[i] : tmp[index];
-	}
-
-	states.states.preImageKey = key;
-	states.states.preImageOffset = 0;
-	return states;
+	return updateSysRet(states, v0, v1);
 }
 
 def doSysWrite(mips_states mut states, u32 a0, u32 a1, u32 mut a2) -> mips_states {
@@ -577,22 +506,27 @@ def doSysWrite(mips_states mut states, u32 a0, u32 a1, u32 mut a2) -> mips_state
 
 	u32 align = a1 & 3;
 	a2 = a0 == 6 && a2 > 4 - align ? 4 - align : a2;
-	u32 v0 = (a0 == 1 || a0 == 2 || a0 == 4 || a0 == 6) ? a2 : 0xFFFFFFFF;
-	u32 v1 = (a0 == 1 || a0 == 2 || a0 == 4 || a0 == 6) ? 0 : 9;
+	u32 v0 = (a0 == 1 || a0 == 2) ? a2 : 0xFFFFFFFF;
+	u32 v1 = (a0 == 1 || a0 == 2) ? 0 : 9;
 
-	states = a0 == 6 ? doFdPreimageWrite(states, a1, a2) : states;
 	return updateSysRet(states, v0, v1);
 }
 
 def doSysFcntl(mips_states mut states, u32 a0, u32 a1) -> mips_states
 {
 	// args: a0 = fd, a1 = cmd
-	u32 v0 = (a1 == 3) ? (a0 == 0 || a0 == 3 || a0 == 5) ?  0 :
-							(a0 == 1 || a0 == 2 || a0 == 4 || a0 == 6) ? 1 : 0xFFFFFFFF
+	u32 v0 = (a1 == 3) ? (a0 == 0) ?  0 :
+							(a0 == 1 || a0 == 2) ? 1 : 0xFFFFFFFF
 					 : 0xFFFFFFFF;
-	u32 v1 = (a1 == 3) ? (a0 <= 6) ? 0 : 9
+	u32 v1 = (a1 == 3) ? (a0 <= 2) ? 0 : 9
 	                : 0x00000016;
 	return updateSysRet(states, v0, v1);
+}
+
+def doGetPreImage(mips_states mut states) -> mips_states
+{
+	states.updateRoot = true;
+	return updateSysRet(states, 0, 0);
 }
 
 //	sysMmap      = 4090
@@ -619,7 +553,8 @@ def handleSyscall(mips_states mut states) -> mips_states {
 					sysNum == 4003 ? doSysRead(states, a0, a1, a2) :
 					  sysNum == 4004 ? doSysWrite(states, a0, a1, a2) :
 						sysNum == 4055 ? doSysFcntl(states, a0, a1) :
-						  assert_unreached_states(states);
+							sysNum == 4020 ? doGetPreImage(states) :
+						  		assert_unreached_states(states);
 }
 
 def u64_from_u32(u32 input, bool sign) -> u64 {
@@ -864,13 +799,16 @@ def check_instruction(mips_states mut states, trace_record nextStates) -> mips_s
 	log("read {} {}, write {}, {}: {}, rd {} {} {}", states.read, states.read_addr,
 	        states.write, states.write_addr, states.write_val,
 			states.updateRd, states.rd, states.rdVal);
-	u8[32] root = states.read ? checkReadMem(states.states.mem.mem_proof, states.read_addr) : states.states.memRoot.hash;
-	//log("proof {}", states.states.mem.mem_proof);
+	u8[32] root = states.read ? checkReadMem(states.states.mem_proof, states.read_addr) : states.states.memRoot.hash;
+	//log("proof {}", states.states.mem_proof);
 	log("lo {} {}, hi {} {}", states.states.lo, nextStates.lo, states.states.hi, nextStates.hi);
 	log("root {} {}", root, states.states.memRoot.hash);
 	assert(states.states.memRoot.hash == root);
-	states.states.memRoot.hash = states.write ? updateMemory(states, states.write_addr, states.write_val): states.states.memRoot.hash;
-	states.states.mem = nextStates.mem;
+	states.states.memRoot.hash = states.updateRoot ? nextStates.memRoot.hash :
+									states.write ? updateMemory(states, states.write_addr, states.write_val):
+										states.states.memRoot.hash;
+	states.states.mem_proof = nextStates.mem_proof;
+	states.states.insn_proof = nextStates.insn_proof;
 	log("regs {} {}", states.states.regs, nextStates.regs);
 	log("memRoot {} {}", states.states.memRoot, nextStates.memRoot);
 	assert(states.states == nextStates);
@@ -890,6 +828,7 @@ def do_check<recordSize>(
 		write_val: 0,
 		write_addr: 0,
 		updateRd: false,
+		updateRoot: false,
 		rd: 0,
 		rdVal: 0
 	};
