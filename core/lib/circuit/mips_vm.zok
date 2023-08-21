@@ -7,14 +7,6 @@ import "utils/casts/u8_from_bits";
 //from "hashes/keccak/256bit" import main as kecca256;
 import "hashes/pedersen/512bitBool" as pedersen;
 
-struct mem_hash {
-	u8[32] hash;
-}
-
-struct memory_proof {
-	mem_hash[28] node;
-}
-
 struct trace_record {
 	u32 cycle;
 	u32 pc;
@@ -25,10 +17,10 @@ struct trace_record {
 	u32 heap;
 	u8 exitCode;
 	bool exited;
-	mem_hash memRoot;
+	u8[32] memRoot;
 
-	memory_proof insn_proof;
-	memory_proof mem_proof;
+	u8[28][32] insn_proof;
+	u8[28][32] mem_proof;
 }
 
 struct mips_states {
@@ -221,15 +213,15 @@ def hashPair(u8[32] a, u8[32] b)-> u8[32] {
     return res;
 }
 
-def checkReadMem(memory_proof proof, u32 addr) -> u8[32] {
-	u8[32] leaf = proof.node[0].hash;
+def checkReadMem(u8[28][32] proof, u32 addr) -> u8[32] {
+	u8[32] leaf = proof[0];
 
 	u32 mut path = addr >> 5;
 	u8[32] mut node = leaf;
 
 	for u32 i in 1 .. 28 {
-		u8[32] a1 = (path & 1) == 0 ? node : proof.node[i].hash;
-		u8[32] a2 = (path & 1) == 0 ? proof.node[i].hash : node;
+		u8[32] a1 = (path & 1) == 0 ? node : proof[i];
+		u8[32] a2 = (path & 1) == 0 ? proof[i] : node;
 
 		node = hashPair(a1, a2);
 		path = path >> 1;
@@ -237,10 +229,10 @@ def checkReadMem(memory_proof proof, u32 addr) -> u8[32] {
 	return node;
 }
 
-def getDataFromProof(mips_states mut states, memory_proof proof, u32 addr) -> u32 {
+def getDataFromProof(mips_states mut states, u8[28][32] proof, u32 addr) -> u32 {
 	assert (addr & 3 == 0);
 
-	u8[32] leaf = proof.node[0].hash;
+	u8[32] leaf = proof[0];
 	u32 shamt = addr & 0x0000001F;
 
 	u8[4] data = [
@@ -256,7 +248,7 @@ def getDataFromProof(mips_states mut states, memory_proof proof, u32 addr) -> u3
 
 def getInstruction(mips_states mut states, u32 addr) -> (u32, mips_states) {
 	u32 data = getDataFromProof(states, states.states.insn_proof, addr);
-	assert(checkReadMem(states.states.insn_proof, addr) == states.states.memRoot.hash);
+	assert(checkReadMem(states.states.insn_proof, addr) == states.states.memRoot);
 	return (data, states);
 }
 
@@ -276,7 +268,7 @@ def setMemory(mips_states mut states, u32 addr, u32 value) -> mips_states  {
 
 def updateMemory(mips_states mut states, u32 addr, u32 value) -> u8[32] {
 
-	u8[32] mut leaf = states.states.mem_proof.node[0].hash;
+	u8[32] mut leaf = states.states.mem_proof[0];
 	u8[4] data = u32_to_u8_array(value);
 	u32 shamt = addr & 0x0000001F;
 
@@ -292,8 +284,8 @@ def updateMemory(mips_states mut states, u32 addr, u32 value) -> u8[32] {
 	u8[32] mut node = leaf;
 
 	for u32 i in 1 .. 28 {
-		u8[32] a1 =  (path & 1) == 0 ? node : states.states.mem_proof.node[i].hash;
-		u8[32] a2 =  (path & 1) == 0 ? states.states.mem_proof.node[i].hash : node;
+		u8[32] a1 =  (path & 1) == 0 ? node : states.states.mem_proof[i];
+		u8[32] a2 =  (path & 1) == 0 ? states.states.mem_proof[i] : node;
 
 		node = hashPair(a1, a2);
 		path = path >> 1;
@@ -799,14 +791,14 @@ def check_instruction(mips_states mut states, trace_record nextStates) -> mips_s
 	log("read {} {}, write {}, {}: {}, rd {} {} {}", states.read, states.read_addr,
 	        states.write, states.write_addr, states.write_val,
 			states.updateRd, states.rd, states.rdVal);
-	u8[32] root = states.read ? checkReadMem(states.states.mem_proof, states.read_addr) : states.states.memRoot.hash;
+	u8[32] root = states.read ? checkReadMem(states.states.mem_proof, states.read_addr) : states.states.memRoot;
 	//log("proof {}", states.states.mem_proof);
 	log("lo {} {}, hi {} {}", states.states.lo, nextStates.lo, states.states.hi, nextStates.hi);
-	log("root {} {}", root, states.states.memRoot.hash);
-	assert(states.states.memRoot.hash == root);
-	states.states.memRoot.hash = states.updateRoot ? nextStates.memRoot.hash :
+	log("root {} {}", root, states.states.memRoot);
+	assert(states.states.memRoot == root);
+	states.states.memRoot = states.updateRoot ? nextStates.memRoot :
 									states.write ? updateMemory(states, states.write_addr, states.write_val):
-										states.states.memRoot.hash;
+										states.states.memRoot;
 	states.states.mem_proof = nextStates.mem_proof;
 	states.states.insn_proof = nextStates.insn_proof;
 	log("regs {} {}", states.states.regs, nextStates.regs);
