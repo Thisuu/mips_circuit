@@ -1,0 +1,802 @@
+import "utils/casts/u64_to_bits";
+import "utils/casts/u64_from_bits";
+import "utils/casts/u32_to_bits";
+import "utils/casts/u32_from_bits";
+import "utils/casts/u8_to_bits";
+import "utils/casts/u8_from_bits";
+//from "hashes/keccak/256bit" import main as kecca256;
+//import "hashes/pedersen/512bitBool" as pedersen;
+import "hashes/blake2/blake2s" as blake2s;
+
+struct trace_record {
+	u32 cycle;
+	u32 pc;
+	u32 nextPC;
+	u32 lo;
+	u32 hi;
+	u32[32] regs;
+	u32 heap;
+	u8 exitCode;
+	bool exited;
+	u8[32] memRoot;
+
+	u8[28][32] insn_proof;
+	u8[28][32] mem_proof;
+}
+
+struct mips_states {
+	trace_record states;
+
+	bool read;
+	u32 read_addr;
+	bool write;
+	u32 write_val;
+	u32 write_addr;
+	bool updateRd;
+	u32 rd;
+	u32 rdVal;
+	bool updateRoot;
+	bool illegal;
+}
+
+def u32_to_u8_array(u32 input) -> u8[4] {
+    bool[32] bits = u32_to_bits(input);
+    return [
+        u8_from_bits(bits[0..8]),
+        u8_from_bits(bits[8..16]),
+        u8_from_bits(bits[16..24]),
+        u8_from_bits(bits[24..32])
+    ];
+}
+
+def u32_from_u8_array(u8[4] input) -> u32  {
+    bool[32] bits =  [
+        ...u8_to_bits(input[0]),
+        ...u8_to_bits(input[1]),
+        ...u8_to_bits(input[2]),
+        ...u8_to_bits(input[3])
+    ];
+
+	return u32_from_bits(bits);
+}
+
+def updateReg(mips_states mut states, u32 reg, u32 value) -> mips_states {
+	assert(reg < 32);
+
+	for u32 i in 1..32 {
+		states.states.regs[i] = i == reg ? value : states.states.regs[i] ;
+	}
+
+	return states;
+}
+
+def handleJump(mips_states mut states, u32 link, u32 dest) -> mips_states {
+	u32 prevPC = states.states.pc;
+	states.states.pc = states.states.nextPC;
+	states.states.nextPC = dest;
+	return if link == 0 {
+		states
+	} else {
+		updateReg(states, link, prevPC + 8)
+	};
+}
+
+def SE<index>(u32 dat) -> u32 {
+	bool isSigned = (dat >> (index - 1)) != 0;
+	u32 signed = ((1 << (32 - index)) - 1) << index;
+	u32 mask = (1 << index) - 1;
+	return if isSigned {
+		dat & mask | signed
+	} else {
+		dat & mask
+	};
+}
+
+def handleBranch(mips_states mut states, u32 opcode, u32 insn, u32 rtReg, u32 rs) -> mips_states {
+	bool mut shouldBranch = false;
+	u32 rtv = (insn >> 16) & 0x0000001F;
+	u32 rt = states.states.regs[rtReg];
+	shouldBranch = 	if opcode == 4 || opcode == 5 { // beq/bne
+		(rs ==rt && opcode == 4) || (rs != rt && opcode == 5)
+	} else {
+		if opcode == 6 {
+			rs >= 0x80000000 || rs == 0 // blez
+		} else {
+			if opcode == 7 {
+				rs < 0x80000000 && rs != 0 // bgtz
+			} else {
+				if opcode == 1 {
+
+					if rtv == 0 { // bltz
+						rs > 0x80000000
+					} else {
+						if rtv == 1 { // bgez
+							rs <= 0x80000000
+						} else {
+							shouldBranch
+						}
+					}
+				} else {
+					shouldBranch
+				}
+			}
+		}
+	};
+
+	u32 prevPC = states.states.pc;
+	states.states.pc = states.states.nextPC;
+	states.states.nextPC = if shouldBranch {
+		prevPC + 4 + (SE::<16>(insn & 0x0000FFFF) << 2)
+	} else {
+		states.states.pc + 4
+	};
+
+	return states;
+}
+
+def hashPair(u8[32] a, u8[32] b)-> u8[32] {
+    u32[1][16] mut e = [[0;16]];
+    e[0] = [
+        u32_from_u8_array(a[0..4]),
+        u32_from_u8_array(a[4..8]),
+        u32_from_u8_array(a[8..12]),
+        u32_from_u8_array(a[12..16]),
+        u32_from_u8_array(a[16..20]),
+        u32_from_u8_array(a[20..24]),
+        u32_from_u8_array(a[24..28]),
+        u32_from_u8_array(a[28..32]),
+        u32_from_u8_array(b[0..4]),
+        u32_from_u8_array(b[4..8]),
+        u32_from_u8_array(b[8..12]),
+        u32_from_u8_array(b[12..16]),
+        u32_from_u8_array(b[16..20]),
+        u32_from_u8_array(b[20..24]),
+        u32_from_u8_array(b[24..28]),
+        u32_from_u8_array(b[28..32])
+    ];
+	
+    u32[8] result = blake2s(e);
+
+    u8[32] res = [
+        ...u32_to_u8_array(result[0]),
+        ...u32_to_u8_array(result[1]),
+        ...u32_to_u8_array(result[2]),
+        ...u32_to_u8_array(result[3]),
+        ...u32_to_u8_array(result[4]),
+        ...u32_to_u8_array(result[5]),
+        ...u32_to_u8_array(result[6]),
+        ...u32_to_u8_array(result[7])
+    ];
+
+	log("hash {}, {} = {}", a, b , res);
+    return res;
+}
+
+def checkReadMem(u8[28][32] proof, u32 addr) -> u8[32] {
+	u8[32] leaf = proof[0];
+
+	u32 mut path = addr >> 5;
+	u8[32] mut node = leaf;
+
+	for u32 i in 1 .. 28 {
+		u8[32] a1 = (path & 1) == 0 ? node : proof[i];
+		u8[32] a2 = (path & 1) == 0 ? proof[i] : node;
+
+		node = hashPair(a1, a2);
+		path = path >> 1;
+	}
+	return node;
+}
+
+def getDataFromProof(mips_states mut states, u8[28][32] proof, u32 addr) -> u32 {
+	assert (addr & 3 == 0);
+
+	u8[32] leaf = proof[0];
+	u32 shamt = addr & 0x0000001F;
+
+	u8[4] data = [
+		leaf[shamt],
+		leaf[shamt + 1],
+		leaf[shamt + 2],
+		leaf[shamt + 3]
+	];
+	//log("data block ={}, addr={}", leaf, addr);
+	log("load data = {}", data);
+	return u32_from_u8_array(data);
+}
+
+def getInstruction(mips_states mut states, u32 addr) -> (u32, mips_states) {
+	u32 data = getDataFromProof(states, states.states.insn_proof, addr);
+	assert(checkReadMem(states.states.insn_proof, addr) == states.states.memRoot);
+	return (data, states);
+}
+
+def getMemory(mips_states mut states, u32 addr) -> (u32, mips_states) {
+	u32 data = getDataFromProof(states, states.states.mem_proof, addr);
+	states.read = true;
+	states.read_addr = addr;
+	return (data, states);
+}
+
+def setMemory(mips_states mut states, u32 addr, u32 value) -> mips_states  {
+	states.write = true;
+	states.write_addr = addr;
+	states.write_val = value;
+	return states;
+}
+
+def updateMemory(mips_states mut states, u32 addr, u32 value) -> u8[32] {
+
+	u8[32] mut leaf = states.states.mem_proof[0];
+	u8[4] data = u32_to_u8_array(value);
+	u32 shamt = addr & 0x0000001F;
+
+	// May need take Endian into consideration
+	for u32 i in 0 .. 32 {
+		leaf[i] =  i == shamt ? data[0] :
+				   i == shamt + 1 ? data[1] :
+				   i == shamt + 2 ? data[2] :
+				   i == shamt + 3 ? data[3] : leaf[i];
+	}
+	
+	u32 mut path = addr >> 5;
+	u8[32] mut node = leaf;
+
+	for u32 i in 1 .. 28 {
+		u8[32] a1 =  (path & 1) == 0 ? node : states.states.mem_proof[i];
+		u8[32] a2 =  (path & 1) == 0 ? states.states.mem_proof[i] : node;
+
+		node = hashPair(a1, a2);
+		path = path >> 1;
+	}
+
+	return node;
+}
+
+def do_clo(u32 func, u32 mut rs) -> u32 {
+	rs = if func == 0x00000020 {
+		!rs
+	} else {
+		rs
+	};
+
+	u32 mut ret = 0;
+	bool mut break = false;
+
+	for u32 i in 0 .. 33 {
+		ret = rs & 0x80000000 == 0 ? i : ret;
+		break = break || rs & 0x80000000 == 0;
+		rs = break ? 0x80000000 : rs << 1;
+	}
+
+	return ret;
+}
+
+def shift_left(u32 val, u32 shamt)-> u32 {
+	assert(shamt < 32);
+	bool[32] mut bits = u32_to_bits(val);
+	for u32 i in 0..32 {
+		u32 index = i + shamt < 32 ? i + shamt : 31;
+		bits[i] = i + shamt < 32 ? bits[index] : false;
+	}
+
+	log("shl {} {} {}", val, shamt, u32_from_bits(bits));
+	return u32_from_bits(bits);
+}
+
+def shift_right(u32 val, u32 shamt)-> u32 {
+	assert(shamt < 32);
+	bool[32] bits = u32_to_bits(val);
+    bool[32] mut res = [false;32];
+	for u32 i in 0..32 {
+		u32 index = i >= shamt? i - shamt : 0;
+		res[i] = i < shamt ? false : bits[index];
+	}
+
+	log("shr {} {} {}", val, shamt, u32_from_bits(res));
+	return u32_from_bits(res);
+}
+
+def arith_shift_right(u32 val, u32 shamt) -> u32 {
+	assert(shamt < 32);
+	bool[32] bits = u32_to_bits(val);
+    bool[32] mut res = [false;32];
+	for u32 i in 0..32 {
+		u32 index = i >= shamt ? i - shamt : 0;
+		res[i] = bits[index];
+	}
+	log("sar {} {} {}", val, shamt, u32_from_bits(res));
+	return u32_from_bits(res);
+}
+
+def assert_unreached_states(mips_states mut states) -> mips_states {
+	states.illegal = true;
+	return states;
+}
+
+def execute(mips_states states, u32 insn, u32 rs, u32 rt, u32 mem) -> (u32, mips_states) {
+
+	u32 opcode = insn >> 26;
+	u32 mut func = insn & 0x0000003F;
+	u32 shamt = (insn >> 6) & 0x0000001F;
+	log("execute insn:{} rs:{} rt:{} mem:{} shamt:{}", insn, rs, rt, mem, shamt);
+
+	u32 slv = rs & 0x0000001F;
+	u32 lwl = (rs & 3) * 8;
+	u32 lbu = 24 - (rs & 3) * 8;
+	u32 lhu = 16 - (rs & 2) * 8;
+
+	return if opcode == 0 || (opcode >= 8 && opcode < 0x0000000F) {
+		if func < 0x00000020 && opcode == 0 {
+			func >= 8 ?  (rs, states) :  // jr/jalr/div + others
+				func == 0 ? (shift_left(rt, shamt), states) :  // sll
+					func == 2 ? (shift_right(rt, shamt), states) :  // srl
+						func == 3 ? (arith_shift_right(rt, shamt), states) :  // sra
+							func == 4 ? (shift_left(rt, slv), states):  // sllv
+								func == 6 ? (shift_right(rt, slv), states):  // srlv
+									func == 7 ? (arith_shift_right(rt, slv), states):  // srav
+										(0, assert_unreached_states(states))
+		} else {
+			func == 0x00000020 || func == 0x00000021 || opcode == 8 || opcode == 9 ? (rs + rt, states) :  // add or addu
+				func == 0x00000022 || func == 0x00000023 ? (rs - rt, states) :  // sub or subu
+					func == 0x00000024 || opcode == 0x0000000C ? (rs & rt, states) :  // and
+						func == 0x00000025  || opcode == 0x0000000D ? (rs | rt, states) :  // or
+							func == 0x00000026  || opcode == 0x0000000E ? (rs ^ rt, states) : // xor
+								func == 0x00000027 ? (!(rs | rt), states) : // nor
+									func == 0x0000002A || opcode == 0x0000000A ? (
+										(rs < rt && rt < 0x80000000) || (rs > rt && rs >= 0x80000000) ||
+											(rs < rt && rs == 0x80000000) ? 1u32 : 0u32, states) : // slt
+										func ==0x0000002B || opcode == 0x0000000B ? (rs < rt ? (1u32, states) : (0u32, states)) : // sltu
+											(0, assert_unreached_states(states))
+		}
+	} else {
+		if opcode == 0x0000000F {
+			(rt << 16, states)  // lui
+		} else {
+			if opcode == 0x0000001C {  // SPECIAL2
+				func == 2 ? (rs * rt, states) :   // TODO uint32(int32(rs) * int32(rt))
+					func == 0x00000020 || func == 0x00000021 ? (do_clo(func, rs), states) :    //clo
+						(0, assert_unreached_states(states))
+			} else {
+				if opcode < 0x00000028 {
+					opcode == 0x00000020 ?  // lb
+						(SE::<8>(shift_right(mem, lbu) & 0x000000FF), states) :
+						opcode == 0x00000021 ? // lh
+							(SE::<16>(shift_right(mem, lhu) & 0x0000FFFF), states) :
+							opcode == 0x00000022 ? // lwl
+								((rt & !shift_left(0xFFFFFFFF, lwl)) | shift_left(mem, lwl), states) :
+								opcode == 0x00000023 ? // lw
+									(mem, states) :
+									opcode == 0x00000024 ? // lbu
+										(shift_right(mem, lbu) & 0x000000FF, states) :
+										opcode == 0x00000025 ? // lhu
+											(shift_right(mem, lhu) & 0x0000FFFF, states) :
+											opcode == 0x00000026 ? // lwr
+												((rt & !(shift_right(0xFFFFFFFF, lbu))) | shift_right(mem, lbu), states) :
+												(0, assert_unreached_states(states))
+				} else {
+					opcode == 0x00000028 ?  // sb
+						((mem & (0xFFFFFFFF ^ shift_left(0x000000FF, lbu))) | shift_left(rt & 0x000000FF, lbu), states) :
+						opcode == 0x00000029 ? // sh
+							((mem & (0xFFFFFFFF ^ shift_left(0x0000FFFF, lhu))) | shift_left(rt & 0x0000FFFF, lhu), states) :
+							opcode == 0x0000002A ? // swl
+								((mem & !shift_right(0xFFFFFFFF, lwl)) | shift_right(rt, lwl), states) :
+								opcode == 0x0000002B ? // sw
+									(rt, states) :
+									opcode == 0x0000002E ? // swr
+										((mem & !shift_left(0xFFFFFFFF, lbu)) | shift_left(rt, lbu), states) :
+										opcode == 0x00000030 ? // ll
+											(mem, states) :
+											opcode == 0x00000038 ? // sc
+												(rt, states) :
+												(0, assert_unreached_states(states))
+				}
+			}
+		}
+	};
+}
+
+def handleRd(mips_states mut states, u32 rd, u32 val, bool cond) -> mips_states {
+	states.states.pc = states.states.nextPC;
+	states.states.nextPC = states.states.nextPC + 4;
+	states.updateRd = rd!=0 && cond;
+	states.rd = rd;
+	states.rdVal = val;
+	return states;
+}
+
+def updateSysRet(mips_states mut states, u32 v0, u32 v1) -> mips_states
+{
+	states = updateReg(states, 2, v0);
+	states = updateReg(states, 7, v1);
+	states.states.pc = states.states.nextPC;
+	states.states.nextPC = states.states.nextPC + 4;
+	return states;
+}
+
+def doSysMmap(mips_states mut states, u32 a0, u32 a1) -> mips_states
+{
+	u32 sz = a1 & 0x00000FFF == 0 ? a1 : (a1 + 0x00001000) & 0xFFFFF000;
+	u32 v0 = a0 == 0 ? states.states.heap : a0;
+	states.states.heap = a0 == 0 ? states.states.heap + sz : states.states.heap;
+	return updateSysRet(states, v0, 0);
+}
+
+def u8_from_u32(u32 input) -> u8 {
+	bool[32] u32_bits = [...u32_to_bits(input)];
+    return u8_from_bits(u32_bits[0..8]);
+}
+
+def doSysExitGroup(mips_states mut states, u32 a0) -> mips_states
+{
+	states.states.exited = true;
+	states.states.exitCode = u8_from_u32(a0);
+	return states;
+}
+
+//	fdStdin         = 0
+//	fdStdout        = 1
+//	fdStderr        = 2
+
+//	MipsEBADF  = 0x9
+//	MipsEINVAL = 0x16
+
+def doSysRead(mips_states mut states, u32 a0, u32 a1, u32 a2) -> mips_states {
+	// args: a0 = fd, a1 = addr, a2 = count
+	// returns: v0 = read, v1 = err code
+	u32 v0 = a0 == 0 ? 0 :         // fdStdin
+					0xFFFFFFFF;       // default
+	u32 v1 = a0 == 0 ? 0 : 9;
+
+	return updateSysRet(states, v0, v1);
+}
+
+def doSysWrite(mips_states mut states, u32 a0, u32 a1, u32 mut a2) -> mips_states {
+	// args: a0 = fd, a1 = addr, a2 = count
+	// returns: v0 = read, v1 = err code
+
+	u32 align = a1 & 3;
+	a2 = a0 == 6 && a2 > 4 - align ? 4 - align : a2;
+	u32 v0 = (a0 == 1 || a0 == 2) ? a2 : 0xFFFFFFFF;
+	u32 v1 = (a0 == 1 || a0 == 2) ? 0 : 9;
+
+	return updateSysRet(states, v0, v1);
+}
+
+def doSysFcntl(mips_states mut states, u32 a0, u32 a1) -> mips_states
+{
+	// args: a0 = fd, a1 = cmd
+	u32 v0 = (a1 == 3) ? (a0 == 0) ?  0 :
+							(a0 == 1 || a0 == 2) ? 1 : 0xFFFFFFFF
+					 : 0xFFFFFFFF;
+	u32 v1 = (a1 == 3) ? (a0 <= 2) ? 0 : 9
+	                : 0x00000016;
+	return updateSysRet(states, v0, v1);
+}
+
+def doGetPreImage(mips_states mut states) -> mips_states
+{
+	states.updateRoot = true;
+	return updateSysRet(states, 0, 0);
+}
+
+//	sysMmap      = 4090
+//	sysBrk       = 4045
+//	sysClone     = 4120
+//	sysExitGroup = 4246
+//	sysRead      = 4003
+//	sysWrite     = 4004
+//	sysFcntl     = 4055
+
+def handleSyscall(mips_states mut states) -> mips_states {
+	//log("handleSyscall {}", states.states.regs[2]);
+	u32 sysNum = states.states.regs[2];
+	u32 a0 = states.states.regs[4];
+	u32 a1 = states.states.regs[5];
+	u32 a2 = states.states.regs[6];
+	u32 mut v0 = 0;
+	u32 mut v1 = 0;
+
+	return sysNum == 4090 ? doSysMmap(states, a0, a1) :
+			 sysNum == 4045 ? updateSysRet(states, 0x40000000, 0) :
+				sysNum == 4120 ? updateSysRet(states, 1, 0) :
+				  sysNum == 4246 ? doSysExitGroup(states, a0) :
+					sysNum == 4003 ? doSysRead(states, a0, a1, a2) :
+					  sysNum == 4004 ? doSysWrite(states, a0, a1, a2) :
+						sysNum == 4055 ? doSysFcntl(states, a0, a1) :
+							sysNum == 4020 ? doGetPreImage(states) :
+						  		assert_unreached_states(states);
+}
+
+def u64_from_u32(u32 input, bool sign) -> u64 {
+	bool[32] u32_bits = u32_to_bits(input);
+	bool[32] ext = [sign ? u32_bits[0] : false; 32];
+    bool[64] bits = [
+		...ext,
+		...u32_bits
+    ];
+    return u64_from_bits(bits);
+}
+
+def u32_from_u64(u64 input, bool high) -> u32 {
+	bool[64] u64_bits = [...u64_to_bits(input)];
+    return u32_from_bits(high ? u64_bits[0..32] : u64_bits[32..64]);
+}
+
+def sign_div(u32 mut rs, u32 mut rt, bool rem) -> u32 {
+	u32 div_sign = (rs ^ rt) & 0x80000000;
+	u32 rem_sign = rs & 0x80000000;
+	rs = rs & 0x80000000 != 0 ? 0 - rs : rs;
+	rt = rt & 0x80000000 != 0 ? 0 - rt : rt;
+
+	return rem ? (rem_sign != 0 ? 0 - rs % rt : rs % rt) :
+				 (div_sign != 0 ? 0 - rs / rt : rs / rt);
+}
+
+def handleHiLo(mips_states mut states, u32 func, u32 rs, u32 rt, u32 rdReg) -> mips_states {
+	u32 mut val = 0;
+	u64 mulRet = if func == 0x00000018 {  // mult
+		u64_from_u32(rs, true) * u64_from_u32(rt, true)
+	} else {
+		if func == 0x00000019 {  // multu
+			u64_from_u32(rs, false) * u64_from_u32(rt, false)
+		} else {
+			0
+		}
+	};
+
+	val = if func == 0x00000010 {  // mfhi
+		states.states.hi
+	} else {
+		if func == 0x00000012 {  // mflo
+			states.states.lo
+		} else {
+			val
+		}
+	};
+
+	states.states.hi = if func == 0x00000011 {  // mthi
+		rs
+	} else {
+		if func == 0x00000018 || func == 0x00000019 { // mult/multu
+			u32_from_u64(mulRet, true)
+		} else {
+			if func == 0x0000001A { // div
+				sign_div(rs,  ((func != 0x0000001A) && (rt == 0) ? 1 : rt), true)
+			} else {
+				if func == 0x0000001B { // divu
+					rs % (func != 0x0000001B && rt == 0 ? 1 : rt)
+				} else {
+					states.states.hi
+				}
+			}
+		}
+	};
+
+	states.states.lo = if func == 0x00000013 {  // mtlo
+		rs
+	} else {
+		if func == 0x00000018 || func == 0x00000019 { // mult/multu
+			u32_from_u64(mulRet, false)
+		} else {
+			if func == 0x0000001A { // div
+				sign_div(rs,  (func != 0x0000001A && rt == 0 ? 1 : rt), false)
+			} else {
+				if func == 0x0000001B { // divu
+					rs / (func != 0x0000001B && rt == 0 ? 1 : rt)
+				} else {
+					states.states.lo
+				}
+			}
+		}
+	};
+	return handleRd(states, rdReg, val, true);
+}
+
+def UpdateMemAndReg(mips_states mut states, u32 storeAddr, u32 rdReg, u32 val) -> mips_states {
+	states = if storeAddr != 0xFFFFFFFF {
+		setMemory(states, storeAddr, val)
+	} else {
+		states
+	};
+
+	return handleRd(states, rdReg, val, true);
+}
+
+def UpdateMemAndRegWithRt(mips_states mut states, u32 rtReg, u32 storeAddr, u32 rdReg, u32 val) -> mips_states {
+	states = updateReg(states, rtReg, 1);
+	return handleRd(states, rdReg, val, true);
+}
+
+def handleOtherInsts(mips_states mut states, u32 insn, u32 opcode, u32 mut rs, u32 mut rdReg, u32 rtReg) -> mips_states {
+	u32 mut storeAddr = 0xFFFFFFFF;
+	u32 mut mem = 0;
+	u32 mut rt = 0;
+
+	// R-type or I-type (stores rt)
+	rt = if opcode == 0 || opcode == 0x0000001C {
+		// R-type (stores rd)
+		states.states.regs[rtReg]
+	} else {
+		if opcode < 0x00000020 {
+			// rt is SignExtImm
+			// don't sign extend for andi, ori, xori
+			if opcode == 0x0000000C || opcode == 0x0000000D || opcode == 0x0000000E {
+				// ZeroExtImm
+				insn & 0x0000FFFF
+			} else {
+				// SignExtImm
+				SE::<16>(insn & 0x0000FFFF)
+			}
+		} else {
+			if opcode >= 0x00000028 || opcode == 0x00000022 || opcode == 0x00000026 {
+				// store rt value with store
+				states.states.regs[rtReg]
+			} else {
+				rt
+			}
+		}
+	};
+
+	rs = if opcode >= 0x00000020 {
+		rs + SE::<16>(insn & 0x0000FFFF)
+	} else {
+		rs
+	};
+
+	(u32, mips_states) mut v = if opcode >= 0x00000020 {
+		getMemory(states, rs & 0xFFFFFFFC)
+	} else {
+		(mem, states)
+	};
+
+	u32 mem = v.0;
+	states = v.1;
+
+	storeAddr = if opcode >= 0x00000028 && opcode != 0x00000030 {
+		rs & 0xFFFFFFFC
+	} else {
+		storeAddr
+	};
+
+	rdReg = if opcode >= 0x00000028 && opcode != 0x00000030 {
+		0
+	} else {
+		rdReg
+	};
+
+	
+	(u32, mips_states) mut v = execute(states, insn, rs, rt, mem);
+	u32 val = v.0;
+	states = v.1;
+	log("execute result: {}", val);
+	u32 fun = insn & 0x0000003F;
+
+	return if opcode == 0 && fun >= 8 && fun < 0x0000001C {
+		if fun == 8 || fun == 9 { // jr/jalr
+			handleJump(states, fun == 9 ? rdReg : 0, rs)
+		} else {
+			if fun == 0x0000000A { // movz
+				handleRd(states, rdReg, rs, rt == 0)
+			} else {
+				if fun == 0x0000000B { // movn
+					handleRd(states, rdReg, rs, rt != 0)
+				} else {
+					// syscall (can read and write)
+					if fun == 0x0000000C {
+						handleSyscall(states)
+					} else {
+						// lo and hi registers
+						// can write back
+						if fun >= 0x00000010 && fun < 0x0000001C {
+							handleHiLo(states, fun, rs, rt, rdReg)
+						} else {
+							UpdateMemAndReg(states, storeAddr, rdReg, val)
+						}
+					}
+				}
+			}
+		}
+	} else {
+		if opcode == 0x00000038 && rtReg != 0 {
+			UpdateMemAndRegWithRt(states, rtReg, storeAddr, rdReg, val)
+		} else {
+			UpdateMemAndReg(states, storeAddr, rdReg, val)
+		}
+	};
+}
+
+def handleRItypeInsts(mips_states mut states, u32 insn, u32 opcode) -> mips_states {
+	u32 mut rs = 0;
+	u32 mut rtReg = (insn >> 16) & 0x0000001F;
+	u32 mut rdReg = 0;
+
+	rs = states.states.regs[(insn >> 21) & 0x0000001F];
+	rdReg = opcode == 0 || opcode == 0x0000001C ? (insn >> 11) & 0x0000001F  // R-type (stores rd)
+	                                         : rtReg;
+
+	log("insn: {}, opcode: {}, rs: {}, rdReg: {}, rtReg: {}", insn, opcode, rs, rdReg, rtReg);
+	return if (opcode >= 4 && opcode < 8) || opcode == 1 {
+		handleBranch(states, opcode, insn, rtReg, rs)
+	} else {
+		handleOtherInsts(states, insn, opcode, rs, rdReg, rtReg)
+	};
+}
+
+def execute(mips_states mut states) -> mips_states {
+	u32 mut inst = 0;
+	(u32, mips_states) v = getInstruction(states, states.states.pc);
+	inst = v.0;
+	states = v.1;
+
+	log("insn {}", inst);
+	u32 opcode = inst >> 26;
+
+	return if opcode == 2 || opcode == 3 {
+		handleJump(states, opcode == 2 ? 0 : 31, SE::<26>(inst & 0x03FFFFFF) << 2)
+	} else {
+		handleRItypeInsts(states, inst, opcode)
+	};
+}
+
+def check_instruction(mips_states mut states, trace_record nextStates) -> mips_states {
+
+	states = execute(states);
+	
+	states.states.cycle = states.states.cycle + 1;
+	assert(!states.illegal);
+
+	states = states.updateRd ? updateReg(states, states.rd, states.rdVal) : states;
+	log("read {} {}, write {}, {}: {}, rd {} {} {}", states.read, states.read_addr,
+	        states.write, states.write_addr, states.write_val,
+			states.updateRd, states.rd, states.rdVal);
+	u8[32] root = states.read ? checkReadMem(states.states.mem_proof, states.read_addr) : states.states.memRoot;
+	//log("proof {}", states.states.mem_proof);
+	log("lo {} {}, hi {} {}", states.states.lo, nextStates.lo, states.states.hi, nextStates.hi);
+	log("root {} {}", root, states.states.memRoot);
+	assert(states.states.memRoot == root);
+	states.states.memRoot = states.updateRoot ? nextStates.memRoot :
+									states.write ? updateMemory(states, states.write_addr, states.write_val):
+										states.states.memRoot;
+	states.states.mem_proof = nextStates.mem_proof;
+	states.states.insn_proof = nextStates.insn_proof;
+	log("regs {} {}", states.states.regs, nextStates.regs);
+	log("memRoot {} {}", states.states.memRoot, nextStates.memRoot);
+	assert(states.states == nextStates);
+	return states;
+}
+
+def do_check<recordSize>(
+	trace_record[recordSize] mut trace) -> trace_record {
+	u32 mut ret = 0;
+
+	mips_states mut states = mips_states{
+		states: trace[0],
+		illegal: false,
+		read: false,
+		read_addr: 0,
+		write: false,
+		write_val: 0,
+		write_addr: 0,
+		updateRd: false,
+		updateRoot: false,
+		rd: 0,
+		rdVal: 0
+	};
+
+	// check every instruction trace 
+	for u32 i in 1..recordSize {
+		states.illegal = false;
+		states.read = false;
+		states.write = false;
+		states.updateRd = false;
+		states = check_instruction(states, trace[i]);
+	}
+
+	return trace[recordSize - 1];
+}
+
+def main(private trace_record[2] mut trace) -> trace_record {
+
+	return do_check(trace);
+}
