@@ -1,0 +1,107 @@
+import "hashes/poseidon/poseidon" as poseidon;
+import "utils/casts/u8_to_bits"  as to_bits;
+import "utils/casts/u8_from_bits";
+import "utils/pack/bool/pack256";
+import "utils/pack/bool/unpack256";
+
+def hashPair(u8[32] a, u8[32] b)-> u8[32] {
+    bool[512] e = [
+		...to_bits(a[0]),
+		...to_bits(a[1]),
+		...to_bits(a[2]),
+		...to_bits(a[3]),
+		...to_bits(a[4]),
+		...to_bits(a[5]),
+		...to_bits(a[6]),
+		...to_bits(a[7]),
+		...to_bits(a[8]),
+		...to_bits(a[9]),
+		...to_bits(a[10]),
+		...to_bits(a[11]),
+		...to_bits(a[12]),
+		...to_bits(a[13]),
+		...to_bits(a[14]),
+		...to_bits(a[15]),
+		...to_bits(a[16]),
+		...to_bits(a[17]),
+		...to_bits(a[18]),
+		...to_bits(a[19]),
+		...to_bits(a[20]),
+		...to_bits(a[21]),
+		...to_bits(a[22]),
+		...to_bits(a[23]),
+		...to_bits(a[24]),
+		...to_bits(a[25]),
+		...to_bits(a[26]),
+		...to_bits(a[27]),
+		...to_bits(a[28]),
+		...to_bits(a[29]),
+		...to_bits(a[30]),
+		...to_bits(a[31]),
+		...to_bits(b[0]),
+		...to_bits(b[1]),
+		...to_bits(b[2]),
+		...to_bits(b[3]),
+		...to_bits(b[4]),
+		...to_bits(b[5]),
+		...to_bits(b[6]),
+		...to_bits(b[7]),
+		...to_bits(b[8]),
+		...to_bits(b[9]),
+		...to_bits(b[10]),
+		...to_bits(b[11]),
+		...to_bits(b[12]),
+		...to_bits(b[13]),
+		...to_bits(b[14]),
+		...to_bits(b[15]),
+		...to_bits(b[16]),
+		...to_bits(b[17]),
+		...to_bits(b[18]),
+		...to_bits(b[19]),
+		...to_bits(b[20]),
+		...to_bits(b[21]),
+		...to_bits(b[22]),
+		...to_bits(b[23]),
+		...to_bits(b[24]),
+		...to_bits(b[25]),
+		...to_bits(b[26]),
+		...to_bits(b[27]),
+		...to_bits(b[28]),
+		...to_bits(b[29]),
+		...to_bits(b[30]),
+		...to_bits(b[31])
+	];
+
+    field[2] mut input = [
+        pack256(e[0..256]),
+        pack256(e[256..512])
+    ];
+
+    field out = poseidon(input);
+
+    bool[256] result = unpack256(out);
+
+    u8[32] mut res = [0; 32];
+
+    for u32 i in 0..32 {
+        res[i] = u8_from_bits(result[8 * i..8 * (i + 1)]);
+    }
+
+    return res;
+}
+
+def main(u8[2][32] a, u32 addr, u8[32] c) -> u8[32] {
+	u32 mut path = addr >> 5;
+	u8[32] mut node = a[0];
+
+	for u32 i in 1 .. 2 {
+		node = (path & 1) == 0 ? hashPair(node, a[i]) :
+							   hashPair(a[i], node);
+		path = path >> 1;
+	}
+
+	log("x is {}, y is {}", node, c);
+
+	assert(node == c);
+    return node;
+}
