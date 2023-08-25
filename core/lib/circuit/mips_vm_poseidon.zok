@@ -20,8 +20,8 @@ struct trace_record {
 	bool exited;
 	u8[32] memRoot;
 
-	u8[28][32] insn_proof;
-	u8[28][32] mem_proof;
+	u8[896] insn_proof;
+	u8[896] mem_proof;
 
 	u32 newCycle;
 	u32 newPc;
@@ -51,8 +51,8 @@ struct states {
 struct mips_states {
 	states states;
 
-	u8[28][32] insn_proof;
-	u8[28][32] mem_proof;
+	u8[896] insn_proof;
+	u8[896] mem_proof;
 
 	bool read;
 	u32 read_addr;
@@ -246,15 +246,15 @@ def hashPair(u8[32] a, u8[32] b)-> u8[32] {
     return res;
 }
 
-def checkMemAccess(u8[28][32] proof, u32 addr) -> u8[32] {
-	u8[32] leaf = proof[0];
+def checkMemAccess(u8[896] proof, u32 addr) -> u8[32] {
+	u8[32] leaf = proof[0..32];
 
 	u32 mut path = addr >> 5;
 	u8[32] mut node = leaf;
 
 	for u32 i in 1 .. 28 {
-		u8[32] a1 = (path & 1) == 0 ? node : proof[i];
-		u8[32] a2 = (path & 1) == 0 ? proof[i] : node;
+		u8[32] a1 = (path & 1) == 0 ? node : proof[i*32..(i+1) * 32];
+		u8[32] a2 = (path & 1) == 0 ? proof[i*32..(i+1) * 32] : node;
 
 		node = hashPair(a1, a2);
 		path = path >> 1;
@@ -262,10 +262,10 @@ def checkMemAccess(u8[28][32] proof, u32 addr) -> u8[32] {
 	return node;
 }
 
-def getDataFromProof(mips_states mut states, u8[28][32] proof, u32 addr) -> u32 {
+def getDataFromProof(mips_states mut states, u8[896] proof, u32 addr) -> u32 {
 	assert (addr & 3 == 0);
 
-	u8[32] leaf = proof[0];
+	u8[32] leaf = proof[0..32];
 	u32 shamt = addr & 0x0000001F;
 
 	u8[4] data = [
@@ -296,19 +296,18 @@ def setMemory(mips_states mut states, u32 addr, u32 value) -> mips_states  {
 	states.write = true;
 	states.write_addr = addr;
 
-    u8[32] mut leaf = states.mem_proof[0];
+    u8[32] mut leaf = states.mem_proof[0..32];
 	u8[4] data = u32_to_u8_array(value);
 	u32 shamt = addr & 0x0000001F;
 
 	// May need take Endian into consideration
 	for u32 i in 0 .. 32 {
-		leaf[i] =  i == shamt ? data[0] :
+		states.mem_proof[i] =  i == shamt ? data[0] :
 				   i == shamt + 1 ? data[1] :
 				   i == shamt + 2 ? data[2] :
 				   i == shamt + 3 ? data[3] : leaf[i];
 	}
 
-    states.mem_proof[0] = leaf;
 	return states;
 }
 
