@@ -878,7 +878,7 @@ def do_check<recordSize>(
 	return true;
 }
 
-def main(private trace_record[1] mut trace) -> bool {
-
+def main(private trace_record input) -> bool {
+	trace_record[1] mut trace = [input];
 	return do_check(trace);
 }
