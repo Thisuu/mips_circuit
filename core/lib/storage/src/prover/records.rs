@@ -83,3 +83,22 @@ pub struct StoredProof {
     pub f_created_at: DateTime<Utc>,
 
 }
+
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize, UtilsMacro)]
+pub struct StorageTrace {
+    pub f_id: i64,
+    pub f_trace: serde_json::Value,
+    pub f_created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize, UtilsMacro)]
+pub struct StorageWitnessBlockNumber {
+    pub f_id: i64,
+    pub f_block: i64,
+}
+
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize, UtilsMacro)]
+pub struct StorageProofBlockNumber {
+    pub f_id: i64,
+    pub f_block: i64,
+}
