@@ -18,6 +18,23 @@ pub trait DatabaseInterface: Send + Sync + Clone + 'static {
     /// Returns connection to the database.
     async fn acquire_connection(&self) -> anyhow::Result<StorageProcessor<'_>>;
 
+    async fn load_last_witness_block_number(
+        &self,
+        connection: &mut StorageProcessor<'_>,
+    ) -> anyhow::Result<i64>;
+
+    async fn update_last_witness_block_number(
+        &self,
+        connection: &mut StorageProcessor<'_>,
+        block_number: BlockNumber,
+    ) -> anyhow::Result<()>;
+
+    async fn load_trace(
+        &self,
+        connection: &mut StorageProcessor<'_>,
+        block_number: BlockNumber,
+    ) -> anyhow::Result<Option<String>>;
+
     /// Returns stored witness for a block.
     async fn load_witness(
         &self,

@@ -141,25 +141,34 @@ pub fn run_prover_server<DB: DatabaseInterface>(
 
             actix_runtime.block_on(async move {
 
-                let last_verified_block = 0; // FIXME
+                let last_witness_block = {
+                    let mut storage = database
+                        .acquire_connection()
+                        .await
+                        .expect("Failed to access storage");
+
+                    database
+                        .load_last_witness_block_number(&mut storage)
+                        .await
+                        .expect("Failed to get last witness block number")
+                        as usize
+                };
 
                 // Start pool maintainer threads.
-                for offset in 0..witness_generator_opts.witness_generators {
-                    let start_block = (last_verified_block + offset + 1) as u32;
-                    let block_step = witness_generator_opts.witness_generators as u32;
-                    vlog::info!(
+                let start_block = last_witness_block as u32;
+                let block_step = 1;
+                vlog::info!(
                         "Starting witness generator ({},{})",
                         start_block,
                         block_step
                     );
-                    let pool_maintainer = witness_generator::WitnessGenerator::new(
-                        database.clone(),
-                        witness_generator_opts.prepare_data_interval(),
-                        BlockNumber(start_block),
-                        BlockNumber(block_step),
-                    );
-                    pool_maintainer.start(panic_sender.clone());
-                }
+                let pool_maintainer = witness_generator::WitnessGenerator::new(
+                    database.clone(),
+                    witness_generator_opts.prepare_data_interval(),
+                    BlockNumber(start_block),
+                    BlockNumber(block_step),
+                );
+                pool_maintainer.start(panic_sender.clone());
                 // Start HTTP server.
                 let secret_auth = prover_api_opts.secret_auth.clone();
                 let idle_provers = core_opts.idle_provers;
