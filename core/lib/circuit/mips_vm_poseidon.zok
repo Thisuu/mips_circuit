@@ -22,10 +22,37 @@ struct trace_record {
 
 	u8[28][32] insn_proof;
 	u8[28][32] mem_proof;
+
+	u32 newCycle;
+	u32 newPc;
+	u32 newNextPC;
+	u32 newLo;
+	u32 newHi;
+	u32[32] newRegs;
+	u32 newHeap;
+	u8 newExitCode;
+	bool newExited;
+	u8[32] newMemRoot;
+}
+
+struct states {
+	u32 cycle;
+	u32 pc;
+	u32 nextPC;
+	u32 lo;
+	u32 hi;
+	u32[32] regs;
+	u32 heap;
+	u8 exitCode;
+	bool exited;
+	u8[32] memRoot;
 }
 
 struct mips_states {
-	trace_record states;
+	states states;
+
+	u8[28][32] insn_proof;
+	u8[28][32] mem_proof;
 
 	bool read;
 	u32 read_addr;
@@ -253,13 +280,13 @@ def getDataFromProof(mips_states mut states, u8[28][32] proof, u32 addr) -> u32 
 }
 
 def getInstruction(mips_states mut states, u32 addr) -> (u32, mips_states) {
-	u32 data = getDataFromProof(states, states.states.insn_proof, addr);
-	assert(checkMemAccess(states.states.insn_proof, addr) == states.states.memRoot);
+	u32 data = getDataFromProof(states, states.insn_proof, addr);
+	assert(checkMemAccess(states.insn_proof, addr) == states.states.memRoot);
 	return (data, states);
 }
 
 def getMemory(mips_states mut states, u32 addr) -> (u32, mips_states) {
-	u32 data = getDataFromProof(states, states.states.mem_proof, addr);
+	u32 data = getDataFromProof(states, states.mem_proof, addr);
 	states.read = true;
 	states.read_addr = addr;
 	return (data, states);
@@ -269,7 +296,7 @@ def setMemory(mips_states mut states, u32 addr, u32 value) -> mips_states  {
 	states.write = true;
 	states.write_addr = addr;
 
-    u8[32] mut leaf = states.states.mem_proof[0];
+    u8[32] mut leaf = states.mem_proof[0];
 	u8[4] data = u32_to_u8_array(value);
 	u32 shamt = addr & 0x0000001F;
 
@@ -281,7 +308,7 @@ def setMemory(mips_states mut states, u32 addr, u32 value) -> mips_states  {
 				   i == shamt + 3 ? data[3] : leaf[i];
 	}
 
-    states.states.mem_proof[0] = leaf;
+    states.mem_proof[0] = leaf;
 	return states;
 }
 
@@ -771,7 +798,7 @@ def execute(mips_states mut states) -> mips_states {
 	};
 }
 
-def check_instruction(mips_states mut states, trace_record nextStates) -> mips_states {
+def check_instruction(mips_states mut states, states result) -> mips_states {
 
 	states = execute(states);
 	
@@ -782,25 +809,37 @@ def check_instruction(mips_states mut states, trace_record nextStates) -> mips_s
 
 	u32 mem_addr = states.write ? states.write_addr : states.read_addr;
     assert(mem_addr == states.read_addr);
-    u8[32] root = states.read || states.write ? checkMemAccess(states.states.mem_proof, mem_addr) : states.states.memRoot;
-	//log("proof {}", states.states.mem_proof);
-	log("lo {} {}, hi {} {}", states.states.lo, nextStates.lo, states.states.hi, nextStates.hi);
+    u8[32] root = states.read || states.write ? checkMemAccess(states.mem_proof, mem_addr) : states.states.memRoot;
+	//log("proof {}", states.mem_proof);
+	log("lo {} {}, hi {} {}", states.states.lo, result.lo, states.states.hi, result.hi);
 	log("root {} {}", root, states.states.memRoot);
-	states.states.memRoot = states.updateRoot ? nextStates.memRoot : root;
-	states.states.mem_proof = nextStates.mem_proof;
-	states.states.insn_proof = nextStates.insn_proof;
-	log("regs {} {}", states.states.regs, nextStates.regs);
-	log("memRoot {} {}", states.states.memRoot, nextStates.memRoot);
-	assert(states.states == nextStates);
+	states.states.memRoot = states.updateRoot ? result.memRoot : root;
+	log("regs {} {}", states.states.regs, result.regs);
+	log("memRoot {} {}", states.states.memRoot, result.memRoot);
+	assert(states.states == result);
 	return states;
 }
 
 def do_check<recordSize>(
 	trace_record[recordSize] mut trace)-> bool {
 	u32 mut ret = 0;
+	states mut initial_state = states {
+		cycle: trace[0].cycle,
+		pc: trace[0].pc,
+		nextPC: trace[0].nextPC,
+		lo: trace[0].lo,
+		hi: trace[0].hi,
+		regs: trace[0].regs,
+		heap: trace[0].heap,
+		exitCode: trace[0].exitCode,
+		exited: trace[0].exited,
+		memRoot: trace[0].memRoot,
+	};
 
-	mips_states mut states = mips_states{
-		states: trace[0],
+	mips_states mut mips_states = mips_states {
+		states: initial_state,
+		insn_proof: trace[0].insn_proof,
+		mem_proof: trace[0].mem_proof,
 		illegal: false,
 		read: false,
 		read_addr: 0,
@@ -809,23 +848,37 @@ def do_check<recordSize>(
 		updateRd: false,
 		updateRoot: false,
 		rd: 0,
-		rdVal: 0
+		rdVal: 0,
 	};
 
 	// check every instruction trace 
-	for u32 i in 1..recordSize {
-		states.illegal = false;
-		states.read = false;
-		states.write = false;
-		states.updateRd = false;
-		states = check_instruction(states, trace[i]);
+	for u32 i in 0..recordSize {
+		mips_states.illegal = false;
+		mips_states.read = false;
+		mips_states.write = false;
+		mips_states.updateRd = false;
+		mips_states.mem_proof = trace[i].mem_proof;
+		mips_states.insn_proof = trace[i].insn_proof;
+		states result = states {
+			cycle: trace[i].newCycle,
+			pc: trace[i].newPc,
+			nextPC: trace[i].newNextPC,
+			lo: trace[i].newLo,
+			hi: trace[i].newHi,
+			regs: trace[i].newRegs,
+			heap: trace[i].newHeap,
+			exitCode: trace[i].newExitCode,
+			exited: trace[i].newExited,
+			memRoot: trace[i].newMemRoot
+		};
+		mips_states = check_instruction(mips_states, result);
+
 	}
 
 	return true;
-    //return trace[recordSize - 1];
 }
 
-def main(private trace_record[2] mut trace) -> bool {
+def main(private trace_record[1] mut trace) -> bool {
 
 	return do_check(trace);
 }
