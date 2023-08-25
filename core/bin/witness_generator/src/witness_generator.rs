@@ -106,7 +106,7 @@ impl<DB: DatabaseInterface> WitnessGenerator<DB> {
             self.database
                 .update_last_witness_block_number(
                     &mut transaction,
-                    current_block,
+                    next_block,
                 )
                 .await.unwrap();
 

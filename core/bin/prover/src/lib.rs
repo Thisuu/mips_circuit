@@ -89,13 +89,21 @@ pub async fn prover_work_cycle(
         block_args.insert("witness".to_string(), witness_str.unwrap());
         block_args.insert("proving-key-path".to_string(), proving_key_path);
         let proof_str = circuit::proof::generate_proof(&block_args).unwrap();
+        let mut transaction = storage.start_transaction().await.unwrap();
         database
-            .store_proof(&mut storage,
+            .store_proof(&mut transaction,
                          1,
                          current_block,
                          proof_str)
             .await
             .unwrap();
+        database
+            .update_last_proof_block_number(
+                &mut transaction,
+                next_block
+            )
+            .await.unwrap();
+        transaction.commit().await.unwrap();
 
         // Update current block.
         current_block = next_block;
