@@ -96,3 +96,9 @@ pub struct StorageWitnessBlockNumber {
     pub f_id: i64,
     pub f_block: i64,
 }
+
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize, UtilsMacro)]
+pub struct StorageProofBlockNumber {
+    pub f_id: i64,
+    pub f_block: i64,
+}
