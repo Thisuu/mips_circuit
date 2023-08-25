@@ -6,7 +6,7 @@ use anyhow::format_err;
 use types::BlockNumber;
 // Local imports
 use crate::{QueryResult, StorageProcessor};
-use crate::prover::records::{StorageBlockWitnessCloud, StoredProof};
+use crate::prover::records::{StorageBlockWitnessCloud, StoredProof, StorageTrace, StorageWitnessBlockNumber};
 
 pub mod records;
 
@@ -57,7 +57,71 @@ impl ToString for ProverJobType {
 pub struct ProverSchema<'a, 'c>(pub &'a mut StorageProcessor<'c>);
 
 impl<'a, 'c> ProverSchema<'a, 'c> {
+    pub async fn load_last_witness_block_number(
+        &mut self,
+    ) -> QueryResult<i64> {
+        let start = Instant::now();
 
+        let number = sqlx::query_as!(
+            StorageWitnessBlockNumber,
+            "SELECT * FROM t_witness_block_number ORDER BY f_block DESC LIMIT 1",
+        )
+            .fetch_optional(self.0.conn())
+            .await?;
+
+        metrics::histogram!("sql", start.elapsed(), "prover" => "load_last_witness_block_number");
+
+        if let Some(n) = number {
+            return Ok(n.f_block);
+        }
+        return Ok(1);
+    }
+
+    pub async fn update_last_witness_block_number(
+        &mut self,
+        block: BlockNumber,
+    ) -> QueryResult<()> {
+        let start = Instant::now();
+
+        sqlx::query!(
+            r#"
+            INSERT INTO t_witness_block_number (f_id,f_block)
+            VALUES(1, $1)
+            ON CONFLICT (f_id) DO UPDATE SET f_block = $1
+            "#,
+            i64::from(*block)
+        )
+            .execute(self.0.conn())
+            .await?;
+
+        metrics::histogram!("sql", start.elapsed(), "prover" => "update_last_witness_block_number");
+        Ok(())
+    }
+
+    /// Load mips traces
+    pub async fn load_trace(
+        &mut self,
+        block: BlockNumber,
+    ) -> QueryResult<Option<String>> {
+        let start = Instant::now();
+
+        let trace = sqlx::query_as!(
+            StorageTrace,
+            "SELECT * FROM f_traces WHERE f_id = $1",
+            i64::from(*block),
+        )
+            .fetch_optional(self.0.conn())
+            .await?;
+
+        metrics::histogram!("sql", start.elapsed(), "prover" => "load_trace");
+
+        if let Some(t) = trace {
+            let trace: String = serde_json::to_string(&t.f_trace).unwrap();
+
+            return Ok(Some(trace));
+        }
+        return Ok(None);
+    }
 
     /// Stores witness for a block
     pub async fn store_witness(
@@ -103,7 +167,6 @@ impl<'a, 'c> ProverSchema<'a, 'c> {
             let witness_string: String = w.f_object_witness;
 
             return Ok(Some(witness_string));
-
         }
         return Ok(None);
     }
