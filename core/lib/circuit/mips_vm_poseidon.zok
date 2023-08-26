@@ -338,7 +338,7 @@ def shift_left(u32 val, u32 shamt)-> u32 {
 		bits[i] = i + shamt < 32 ? bits[index] : false;
 	}
 
-	log("shl {} {} {}", val, shamt, u32_from_bits(bits));
+	//log("shl {} {} {}", val, shamt, u32_from_bits(bits));
 	return u32_from_bits(bits);
 }
 
@@ -351,7 +351,7 @@ def shift_right(u32 val, u32 shamt)-> u32 {
 		res[i] = i < shamt ? false : bits[index];
 	}
 
-	log("shr {} {} {}", val, shamt, u32_from_bits(res));
+	//log("shr {} {} {}", val, shamt, u32_from_bits(res));
 	return u32_from_bits(res);
 }
 
@@ -363,7 +363,7 @@ def arith_shift_right(u32 val, u32 shamt) -> u32 {
 		u32 index = i >= shamt ? i - shamt : 0;
 		res[i] = bits[index];
 	}
-	log("sar {} {} {}", val, shamt, u32_from_bits(res));
+	//log("sar {} {} {}", val, shamt, u32_from_bits(res));
 	return u32_from_bits(res);
 }
 
@@ -455,6 +455,7 @@ def execute(mips_states states, u32 insn, u32 rs, u32 rt, u32 mem) -> (u32, mips
 }
 
 def handleRd(mips_states mut states, u32 rd, u32 val, bool cond) -> mips_states {
+	log("handleRd:{} {} {}", rd, val, cond);
 	states.states.pc = states.states.nextPC;
 	states.states.nextPC = states.states.nextPC + 4;
 	states.updateRd = rd!=0 && cond;
@@ -547,7 +548,7 @@ def doGetPreImage(mips_states mut states) -> mips_states
 //	sysFcntl     = 4055
 
 def handleSyscall(mips_states mut states) -> mips_states {
-	//log("handleSyscall {}", states.states.regs[2]);
+	log("handleSyscall {}", states.states.regs[2]);
 	u32 sysNum = states.states.regs[2];
 	u32 a0 = states.states.regs[4];
 	u32 a1 = states.states.regs[5];
@@ -592,6 +593,7 @@ def sign_div(u32 mut rs, u32 mut rt, bool rem) -> u32 {
 }
 
 def handleHiLo(mips_states mut states, u32 func, u32 rs, u32 rt, u32 rdReg) -> mips_states {
+	log("handleHiLo {} {} {} {}", func, rs, rt, rdReg);
 	u32 mut val = 0;
 	u64 mulRet = if func == 0x00000018 {  // mult
 		u64_from_u32(rs, true) * u64_from_u32(rt, true)
@@ -652,6 +654,7 @@ def handleHiLo(mips_states mut states, u32 func, u32 rs, u32 rt, u32 rdReg) -> m
 }
 
 def UpdateMemAndReg(mips_states mut states, u32 storeAddr, u32 rdReg, u32 val) -> mips_states {
+	log("UpdateMemAndReg: {} {} {}", storeAddr, rdReg, val);
 	states = if storeAddr != 0xFFFFFFFF {
 		setMemory(states, storeAddr, val)
 	} else {
@@ -662,11 +665,13 @@ def UpdateMemAndReg(mips_states mut states, u32 storeAddr, u32 rdReg, u32 val) -
 }
 
 def UpdateMemAndRegWithRt(mips_states mut states, u32 rtReg, u32 storeAddr, u32 rdReg, u32 val) -> mips_states {
+	log("UpdateMemAndRegWithRt: {} {} {} {}", rtReg, storeAddr, rdReg, val);
 	states = updateReg(states, rtReg, 1);
 	return handleRd(states, rdReg, val, true);
 }
 
 def handleOtherInsts(mips_states mut states, u32 insn, u32 opcode, u32 mut rs, u32 mut rdReg, u32 rtReg) -> mips_states {
+	log("handleOtherInsts: {} {} {} {} {}", insn, opcode, rs, rdReg, rtReg);
 	u32 mut storeAddr = 0xFFFFFFFF;
 	u32 mut mem = 0;
 	u32 mut rt = 0;
@@ -765,6 +770,7 @@ def handleOtherInsts(mips_states mut states, u32 insn, u32 opcode, u32 mut rs, u
 }
 
 def handleRItypeInsts(mips_states mut states, u32 insn, u32 opcode) -> mips_states {
+	log("handleRItypeInsts {} {}", insn, opcode);
 	u32 mut rs = 0;
 	u32 mut rtReg = (insn >> 16) & 0x0000001F;
 	u32 mut rdReg = 0;
@@ -787,7 +793,7 @@ def execute(mips_states mut states) -> mips_states {
 	inst = v.0;
 	states = v.1;
 
-	log("insn {}", inst);
+	log("load insn {}", inst);
 	u32 opcode = inst >> 26;
 
 	return if opcode == 2 || opcode == 3 {
@@ -798,9 +804,8 @@ def execute(mips_states mut states) -> mips_states {
 }
 
 def check_instruction(mips_states mut states, states result) -> mips_states {
-
 	states = execute(states);
-	
+	log("execute_instruction finish {}", states.states.cycle);
 	states.states.cycle = states.states.cycle + 1;
 	assert(!states.illegal);
 
