@@ -747,7 +747,7 @@ def handleOtherInsts(mips_states mut states, u32 insn, u32 opcode, u32 mut rs, u
 						// lo and hi registers
 						// can write back
 						if fun >= 0x00000010 && fun < 0x0000001C {
-							handleHiLo(states, fun, rs, rt, rdReg)
+							handleHiLo(states, opcode != 0 ? 0 : fun, rs, rt, rdReg)
 						} else {
 							UpdateMemAndReg(states, storeAddr, rdReg, val)
 						}
