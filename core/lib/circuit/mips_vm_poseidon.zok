@@ -395,16 +395,16 @@ def execute(mips_states states, u32 insn, u32 rs, u32 rt, u32 mem) -> (u32, mips
 									func == 7 ? (arith_shift_right(rt, slv), states):  // srav
 										(0, assert_unreached_states(states))
 		} else {
-			func == 0x00000020 || func == 0x00000021 || opcode == 8 || opcode == 9 ? (rs + rt, states) :  // add or addu
-				func == 0x00000022 || func == 0x00000023 ? (rs - rt, states) :  // sub or subu
-					func == 0x00000024 || opcode == 0x0000000C ? (rs & rt, states) :  // and
-						func == 0x00000025  || opcode == 0x0000000D ? (rs | rt, states) :  // or
-							func == 0x00000026  || opcode == 0x0000000E ? (rs ^ rt, states) : // xor
-								func == 0x00000027 ? (!(rs | rt), states) : // nor
-									func == 0x0000002A || opcode == 0x0000000A ? (
+			(opcode == 0 && (func == 0x00000020 || func == 0x00000021)) || opcode == 8 || opcode == 9 ? (rs + rt, states) :  // add or addu
+				opcode == 0 && (func == 0x00000022 || func == 0x00000023) ? (rs - rt, states) :  // sub or subu
+					(opcode == 0 && func == 0x00000024) || opcode == 0x0000000C ? (rs & rt, states) :  // and
+						(opcode == 0 && func == 0x00000025)  || opcode == 0x0000000D ? (rs | rt, states) :  // or
+							(opcode == 0 && func == 0x00000026)  || opcode == 0x0000000E ? (rs ^ rt, states) : // xor
+								opcode == 0 && func == 0x00000027 ? (!(rs | rt), states) : // nor
+									(opcode == 0 && func == 0x0000002A) || opcode == 0x0000000A ? (
 										(rs < rt && rt < 0x80000000) || (rs > rt && rs >= 0x80000000) ||
 											(rs < rt && rs == 0x80000000) ? 1u32 : 0u32, states) : // slt
-										func ==0x0000002B || opcode == 0x0000000B ? (rs < rt ? (1u32, states) : (0u32, states)) : // sltu
+										(opcode == 0 && func ==0x0000002B) || opcode == 0x0000000B ? (rs < rt ? (1u32, states) : (0u32, states)) : // sltu
 											(0, assert_unreached_states(states))
 		}
 	} else {
