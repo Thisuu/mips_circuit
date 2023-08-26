@@ -344,12 +344,13 @@ pub fn parse_value<T: Field>(
 pub fn parse_strict<T: Field>(s: &str, types: Vec<ConcreteType>) -> Result<Values<T>, Error> {
     let values: serde_json::Value =
         serde_json::from_str(s).map_err(|e| Error::Json(e.to_string()))?;
+    let wrapped_values = serde_json::Value::Array(vec![values]);
 
-    match values {
+    match wrapped_values {
         serde_json::Value::Array(values) => parse_strict_json(values, types),
         _ => Err(Error::Type(format!(
             "Expected an array of values, found `{}`",
-            values
+            wrapped_values
         ))),
     }
 }
