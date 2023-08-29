@@ -7,6 +7,7 @@ members = [
 
     # Server micro-services
     "core/bin/witness_generator",
+    "contract/bin/deploy_contract",
 
     # Libraries
     "zokrates_common",

@@ -16,6 +16,9 @@ storage = { path = "../../lib/storage", version = "1.0" }
 circuit = { path = "../../lib/circuit", version = "1.0" }
 config = { path = "../../lib/config", version = "1.0" }
 utils = { path = "../../lib/utils", version = "1.0" }
+zokrates_proof_systems = { version = "0.1", path = "../../../zokrates_proof_systems", default-features = false }
+zokrates_field = { version = "0.5.0", path = "../../../zokrates_field", default-features = false }
+
 
 vlog = { path = "../../lib/vlog", version = "1.0"}
 tracing = "0.1.22"
