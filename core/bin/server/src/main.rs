@@ -9,10 +9,11 @@ use serde::{Deserialize, Serialize};
 
 use tokio::task::JoinHandle;
 use config::configs::api::ProverApiConfig;
+use config::configs::verifier::VerifierConfig;
 use storage::ConnectionPool;
 use config::ProverConfig;
 use storage::database_interface::DatabaseInterface;
-use witness_generator::run_prover_server;
+use witness_generator::{run_prover_server, run_verifier_server};
 
 const DEFAULT_CHANNEL_CAPACITY: usize = 32_768;
 
@@ -35,6 +36,7 @@ pub enum Component {
     EthSender,
     Core,
     WitnessGenerator,
+    VerifierGenerator,
     ForcedExit,
 
     // Additional components
@@ -54,6 +56,8 @@ impl FromStr for Component {
             "rpc-websocket-api" => Ok(Component::RpcWebSocketApi),
             "eth-sender" => Ok(Component::EthSender),
             "witness-generator" => Ok(Component::WitnessGenerator),
+            "verifier-generator" => Ok(Component::VerifierGenerator),
+
             "forced-exit" => Ok(Component::ForcedExit),
             "prometheus" => Ok(Component::Prometheus),
             "fetchers" => Ok(Component::Fetchers),
@@ -77,6 +81,7 @@ impl Default for ComponentsToRun {
             Component::RpcWebSocketApi,
             Component::EthSender,
             Component::WitnessGenerator,
+            Component::VerifierGenerator,
             Component::ForcedExit,
             Component::Prometheus,
             Component::Core,
@@ -102,13 +107,13 @@ impl FromStr for ComponentsToRun {
 #[derive(StructOpt)]
 #[structopt(name = "zkm operator node", author = "ZKM")]
 struct Opt {
-    /// Generate genesis block for the first contract deployment
+    /// Generate genesis block for the first contract.rs deployment
     #[structopt(long)]
     genesis: bool,
     /// comma-separated list of components to launch
     #[structopt(
         long,
-        default_value = "rest-api,web3-api,rpc-api,rpc-websocket-api,eth-sender,witness-generator,forced-exit,prometheus,core,rejected-task-cleaner,fetchers,prometheus-periodic-metrics"
+        default_value = "rest-api,web3-api,rpc-api,rpc-websocket-api,eth-sender,witness-generator,verifier-generator,forced-exit,prometheus,core,rejected-task-cleaner,fetchers,prometheus-periodic-metrics"
     )]
     components: ComponentsToRun,
 }
@@ -148,6 +153,9 @@ async fn run_server(components: &ComponentsToRun) {
 
     if components.0.contains(&Component::WitnessGenerator) {
         tasks.push(run_witness_generator(connection_pool.clone()))
+    }
+    if components.0.contains(&Component::VerifierGenerator) {
+        tasks.push(run_verifier(connection_pool.clone()))
     }
 
     {
@@ -195,4 +203,11 @@ pub fn run_witness_generator(connection_pool: ConnectionPool) -> JoinHandle<()> 
     let prover_config = ProverConfig::from_env();
     let database = witness_generator::database::Database::new(connection_pool);
     run_prover_server(database, prover_api_config, prover_config)
+}
+
+pub fn run_verifier(connection_pool: ConnectionPool) -> JoinHandle<()> {
+    vlog::info!("Starting the Prover server actors");
+    let verifier_config = VerifierConfig::from_env();
+    let database = witness_generator::database::Database::new(connection_pool);
+    run_verifier_server(database, verifier_config)
 }

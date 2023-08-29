@@ -10,9 +10,29 @@ use zokrates_ast::ir;
 use zokrates_ast::ir::{ProgEnum, Witness};
 use zokrates_bellman::Bellman;
 use zokrates_common::helpers::{BackendParameter, Parameters, SchemeParameter, CurveParameter};
-use zokrates_field::Field;
+use zokrates_field::{Bn128Field,Field};
 use zokrates_proof_systems::{Backend, G16, GM17, Marlin, Scheme, TaggedProof};
 use zokrates_proof_systems::rng::get_rng_from_entropy;
+use zokrates_proof_systems::Proof;
+use web3::{
+    helpers,
+    contract::{Contract, Options},
+    types::{U64,Address,H256}
+};
+// use primitive_types::U256;
+
+use std::fs;
+use std::str::FromStr;
+use web3::ethabi::Token;
+use zokrates_proof_systems::{
+   SolidityCompatibleScheme
+};
+use web3::contract::tokens::Tokenizable;
+use web3::types::TransactionRequest;
+use web3::types::U256;
+use to_token::ToToken;
+pub mod to_token;
+
 
 pub fn generate_proof(args: &HashMap<String, String>) -> Result<String, String> {
     let path = Path::new(args.get(&"input".to_string()).unwrap());
@@ -113,4 +133,62 @@ fn generate<
     }
 
     Ok(proof_str)
+}
+
+pub async fn call_verify<S: SolidityCompatibleScheme<Bn128Field> + ToToken<Bn128Field>>(
+    proof: Proof<Bn128Field, S>,chainUrl:&str,contractAddress:&str,abiPath:&str,account:&str) -> bool {
+
+    let solidity_proof = S::Proof::from(proof.proof);
+
+    // let modified_solidity_proof = S::modify(solidity_proof);
+
+    let proof_token = S::to_token(solidity_proof.clone());
+
+    // let proof_token = S::to_token(modified_solidity_proof.clone());
+
+    let input_token = Token::FixedArray(
+        proof
+            .inputs
+            .iter()
+            .map(|s| {
+                let mut bytes = hex::decode(s.trim_start_matches("0x")).unwrap();
+                debug_assert_eq!(bytes.len(), 32);
+                Token::Uint(U256::from(&bytes[..]))
+            })
+            .collect::<Vec<_>>(),
+    );
+
+    // let inputs = ethabi::encode(&[proof_token, input_token.clone()]);
+
+    let http = web3::transports::Http::new(chainUrl).unwrap();
+    let web3 = web3::Web3::new(http);
+    let my_account = Address::from_str(account).unwrap();
+
+    let mut op = Options::default();
+    op.gas = Some(3_000_000.into());
+    let abi_path = abiPath.to_owned() + "/verifier.abi";
+    let contract = Contract::from_json(web3.eth(),contractAddress.parse().unwrap(),fs::read(abi_path).unwrap().as_slice()).unwrap();
+    let inputs = contract.abi().function("verifyTx").unwrap().encode_input(&[proof_token, input_token.clone()]).unwrap();
+
+    let result = web3.eth().send_transaction(       TransactionRequest {
+            from:my_account,
+            to: Some(contract.address()),
+            gas:op.gas,
+            gas_price:op.gas_price,
+            value:op.value,
+            nonce:op.nonce,
+            data: Some(web3::types::Bytes(inputs)),
+            condition:op.condition,
+            transaction_type:op.transaction_type,
+            access_list:op.access_list,
+        })
+        .await.unwrap();
+
+    let transactionRes = web3.eth().transaction_receipt(result).await.unwrap().unwrap();
+    if transactionRes.status.unwrap() == U64::from(1){
+        return true;
+    } else {
+        return  false;
+    }
+
 }

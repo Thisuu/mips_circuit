@@ -24,9 +24,11 @@ use tokio::task::JoinHandle;
 use types::BlockNumber;
 use utils::panic_notify::{spawn_panic_handler, ThreadPanicNotify};
 use config::configs::api::ProverApiConfig;
+use config::configs::verifier::VerifierConfig;
 
 pub mod database;
 pub mod database_interface;
+pub mod verifier_generator;
 mod scaler;
 mod witness_generator;
 
@@ -198,6 +200,65 @@ pub fn run_prover_server<DB: DatabaseInterface>(
                     .expect("failed to bind")
                     .run()
                     .await
+            })
+        })
+        .expect("failed to start prover server");
+
+    handler
+}
+
+
+pub fn run_verifier_server<DB: DatabaseInterface>(
+    database: DB,
+    verifier_opts: VerifierConfig,
+) -> JoinHandle<()> {
+    let (handler, panic_sender) = spawn_panic_handler();
+
+    thread::Builder::new()
+        .name("verifier_server".to_string())
+        .spawn(move || {
+            let _panic_sentinel = ThreadPanicNotify(panic_sender.clone());
+            let actix_runtime = actix_rt::System::new();
+
+            actix_runtime.block_on(async move {
+
+                let last_verified_proof_block = {
+                    let mut storage = database
+                        .acquire_connection()
+                        .await
+                        .expect("Failed to access storage");
+
+                    database
+                        .load_last_verified_proof_block_number(&mut storage)
+                        .await
+                        .expect("Failed to get last witness block number")
+                        as usize
+                };
+
+                // Start pool maintainer threads.
+                let start_block = last_verified_proof_block as u32;
+                let block_step = 1;
+                vlog::info!(
+                        "Starting witness generator ({},{})",
+                        start_block,
+                        block_step
+                    );
+
+                println!("{:?}",verifier_opts.chain_url);
+
+                let pool_maintainer = verifier_generator::VerifierGenerator::new(
+                    database.clone(),
+                    Duration::from_millis(500),
+                    BlockNumber(start_block),
+                    BlockNumber(block_step),
+                    verifier_opts.chain_url,
+                    verifier_opts.contract_address,
+                    verifier_opts.abi_path,
+                    verifier_opts.account
+
+                );
+                pool_maintainer.start(panic_sender.clone());
+                // Start HTTP server.
             })
         })
         .expect("failed to start prover server");
