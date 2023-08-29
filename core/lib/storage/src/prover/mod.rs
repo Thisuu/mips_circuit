@@ -77,6 +77,47 @@ impl<'a, 'c> ProverSchema<'a, 'c> {
         return Ok(1);
     }
 
+    pub async fn load_last_verified_proof_block_number(
+        &mut self,
+    ) -> QueryResult<i64> {
+        let start = Instant::now();
+
+        let number = sqlx::query_as!(
+            StorageProofBlockNumber,
+            "SELECT * FROM t_verified_proof_block_number ORDER BY f_block DESC LIMIT 1",
+        )
+            .fetch_optional(self.0.conn())
+            .await?;
+
+        metrics::histogram!("sql", start.elapsed(), "prover" => "load_last_verified_proof_block_number");
+
+        if let Some(n) = number {
+            return Ok(n.f_block);
+        }
+        return Ok(0);
+    }
+
+    pub async fn update_last_verified_proof_block_number(
+        &mut self,
+        block: BlockNumber,
+    ) -> QueryResult<()> {
+        let start = Instant::now();
+
+        sqlx::query!(
+            r#"
+            INSERT INTO t_verified_proof_block_number (f_id,f_block)
+            VALUES(1, $1)
+            ON CONFLICT (f_id) DO UPDATE SET f_block = $1
+            "#,
+            i64::from(*block)
+        )
+            .execute(self.0.conn())
+            .await?;
+
+        metrics::histogram!("sql", start.elapsed(), "prover" => "update_last_verified_proof_block_number");
+        Ok(())
+    }
+
     pub async fn update_last_proof_block_number(
         &mut self,
         block: BlockNumber,
