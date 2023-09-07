@@ -71,14 +71,16 @@ https://github.com/zkMIPS/cannon-mips/tree/mipsevm-minigeth-trace#readme
 - Compile MIPS VM circuit using Zokrates 
 
 1.curl -LSfs get.zokrat.es | sh
+
 2.cd mips_circuit/core/lib/circuit
+
 3.zokrates compile -i mips_vm_poseidon.zok
 
 ## Witness Generator
 
 1.Setting the environment variables:
 
-DATABASE_URL=postgresql://postgres:<db>@<ip>:<port>/<table>
+DATABASE_URL=postgresql://postgres:db@ip:port/table
 DATABASE_POOL_SIZE=10
 API_PROVER_PORT=8088
 API_PROVER_URL=http://127.0.0.1:8088
@@ -98,7 +100,8 @@ RUST_LOG=warn
 2.Compile the witness generator
 
 cd mips_circuit/core/bin/server
-DATABASE_URL=postgresql://postgres:<db>@<ip>:<port>/<table> cargo build --release 
+
+DATABASE_URL=postgresql://postgres:db@ip:port/table cargo build --release 
 
 3.Running the witness generator
 
@@ -126,7 +129,8 @@ CIRCUIT_PROVING_KEY_PATH=/mips_circuit/core/lib/circuit/proving.key # generated 
 2. Compile the prover 
 
 cd mips_circuit/core/bin/prover
-DATABASE_URL=postgresql://postgres:<db>@<ip>:<port>/<table> cargo build --release
+
+DATABASE_URL=postgresql://postgres:db@ip:port/table cargo build --release
 
 3.Running the prover
 
