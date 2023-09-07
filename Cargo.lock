@@ -1260,6 +1260,7 @@ dependencies = [
  "typed-arena",
  "types",
  "vlog",
+ "web3",
  "zokrates_abi",
  "zokrates_ark",
  "zokrates_ast",
@@ -1751,6 +1752,17 @@ checksum = "d6ee87af31d84ef885378aebca32be3d682b0e0dc119d5b4860a2c5bb5046730"
 dependencies = [
  "serde",
  "uuid",
+]
+
+[[package]]
+name = "deploy_contract"
+version = "1.0.0"
+dependencies = [
+ "hex-literal 0.3.4",
+ "serde",
+ "serde_json",
+ "tokio",
+ "web3",
 ]
 
 [[package]]
@@ -2624,6 +2636,12 @@ dependencies = [
  "hex-literal-impl",
  "proc-macro-hack",
 ]
+
+[[package]]
+name = "hex-literal"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7ebdb29d2ea9ed0083cd8cece49bbd968021bd99b0849edb4a9a7ee0fdf6a4e0"
 
 [[package]]
 name = "hex-literal-impl"
@@ -6336,6 +6354,8 @@ dependencies = [
  "types",
  "utils",
  "vlog",
+ "zokrates_field",
+ "zokrates_proof_systems",
 ]
 
 [[package]]
@@ -6400,7 +6420,7 @@ dependencies = [
  "cfg-if 0.1.10",
  "clap-v3",
  "exitcode",
- "hex-literal",
+ "hex-literal 0.2.2",
  "itertools 0.8.2",
  "num-bigint 0.2.6",
  "num-traits 0.2.15",
