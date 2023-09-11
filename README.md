@@ -6,164 +6,168 @@ This is a proof of concept (PoC) for zkmips implemented using the Cannon simulat
 Unlike other zkVM projects, we didn't rush to define the proof system we needed initially. Instead, through this PoC, we aimed to understand the scale and challenges of the proofs required for using zkmips as a zk virtual machine for general computation. Now that this PoC is ready, we plan to release a testnet version based on an entirely new proof system in six months.
 ## Prequistise
 
-- Install Rust
-
-https://www.rust-lang.org/tools/install
+- Install [Rust](https://www.rust-lang.org/tools/install)
+- Install [Zokrates](https://zokrates.github.io/gettingstarted.html)
 
 - Postgres DB
 
-1. Install postgres
+  - Install [postgres](https://www.postgresql.org/download/)
+  - Install [pgadmin(optional)](https://www.pgadmin.org/download/) :Using the pgadmin GUI,it could manage the database visual graphically and easily.
+  - Create Tables:
 
-https://www.postgresql.org/download/
+  ```
+  DROP TABLE IF EXISTS t_block_witness_cloud;
+  CREATE TABLE t_block_witness_cloud
+  (
+      f_id             bigserial PRIMARY KEY,
+      f_block          BIGINT NOT NULL,
+      f_version        BIGINT NOT NULL,
+      f_object_key     text   NOT NULL,
+      f_object_witness text   NOT NULL
+  );
+  
+  DROP TABLE IF EXISTS t_prover_job_queue_cloud;
+  CREATE TABLE t_prover_job_queue_cloud
+  (
+      f_id           bigserial PRIMARY KEY,
+      f_job_status   INTEGER                  NOT NULL,
+      f_job_priority INTEGER                  NOT NULL,
+      f_job_type     TEXT                     NOT NULL,
+      f_created_at   timestamp with time zone NOT NULL DEFAULT now(),
+      f_version      BIGINT                   NOT NULL,
+      f_updated_by   TEXT                     NOT NULL,
+      f_updated_at   timestamp with time zone NOT NULL,
+      f_first_block  BIGINT                   NOT NULL,
+      f_last_block   BIGINT                   NOT NULL,
+      f_object_key   TEXT                     NOT NULL,
+      f_object_job   TEXT                     NOT NULL
+  );
+  
+  DROP TABLE IF EXISTS t_proofs;
+  CREATE TABLE t_proofs
+  (
+      f_id           bigserial PRIMARY KEY,
+      f_block_number BIGINT                   NOT NULL,
+      f_proof        jsonb                    NOT NULL,
+      f_created_at   TIMESTAMP with time zone NOT NULL DEFAULT now()
+  );
+  
+  DROP TABLE IF EXISTS t_witness_block_number;
+  CREATE TABLE t_witness_block_number
+  (
+      f_id           bigserial PRIMARY KEY,
+      f_block     BIGINT                   NOT NULL
+  );
+  
+  DROP TABLE IF EXISTS t_proof_block_number;
+  CREATE TABLE t_proof_block_number
+  (
+      f_id           bigserial PRIMARY KEY,
+      f_block     BIGINT                   NOT NULL
+  );
+  CREATE TABLE t_verified_proof_block_number
+  (
+      f_id           bigserial PRIMARY KEY,
+      f_block       BIGINT                    NOT NULL
+  );
+  ```
 
-2. Install pgadmin(optional) 
+  The id of first execution trace(<first_execution_trace_id>) to be verified or proved can be specified  by following commands:	
 
-Using the pgadmin GUI,it could manage the database visual graphically and easily.
-
-https://www.pgadmin.org/download/
-
-```
-DROP TABLE IF EXISTS t_block_witness_cloud;
-CREATE TABLE t_block_witness_cloud
-(
-    f_id             bigserial PRIMARY KEY,
-    f_block          BIGINT NOT NULL,
-    f_version        BIGINT NOT NULL,
-    f_object_key     text   NOT NULL,
-    f_object_witness text   NOT NULL
-);
-
-DROP TABLE IF EXISTS t_prover_job_queue_cloud;
-CREATE TABLE t_prover_job_queue_cloud
-(
-    f_id           bigserial PRIMARY KEY,
-    f_job_status   INTEGER                  NOT NULL,
-    f_job_priority INTEGER                  NOT NULL,
-    f_job_type     TEXT                     NOT NULL,
-    f_created_at   timestamp with time zone NOT NULL DEFAULT now(),
-    f_version      BIGINT                   NOT NULL,
-    f_updated_by   TEXT                     NOT NULL,
-    f_updated_at   timestamp with time zone NOT NULL,
-    f_first_block  BIGINT                   NOT NULL,
-    f_last_block   BIGINT                   NOT NULL,
-    f_object_key   TEXT                     NOT NULL,
-    f_object_job   TEXT                     NOT NULL
-);
-
-DROP TABLE IF EXISTS t_proofs;
-CREATE TABLE t_proofs
-(
-    f_id           bigserial PRIMARY KEY,
-    f_block_number BIGINT                   NOT NULL,
-    f_proof        jsonb                    NOT NULL,
-    f_created_at   TIMESTAMP with time zone NOT NULL DEFAULT now()
-);
-
-DROP TABLE IF EXISTS t_witness_block_number;
-CREATE TABLE t_witness_block_number
-(
-    f_id           bigserial PRIMARY KEY,
-    f_block     BIGINT                   NOT NULL
-);
-
-DROP TABLE IF EXISTS t_proof_block_number;
-CREATE TABLE t_proof_block_number
-(
-    f_id           bigserial PRIMARY KEY,
-    f_block     BIGINT                   NOT NULL
-);
-CREATE TABLE t_verified_proof_block_number
-(
-    f_id           bigserial PRIMARY KEY,
-    f_block       BIGINT                    NOT NULL
-);
-
-
-INSERT INTO t_witness_block_number(f_block) VALUES(${first execution trace id});
-
-INSERT INTO t_proof_block_number(f_block) VALUES(${first execution trace id});
-```  
+  ```
+  INSERT INTO t_witness_block_number(f_block) VALUES(${<first_execution_trace_id>});
+  
+  INSERT INTO t_proof_block_number(f_block) VALUES(${$(<first_execution_trace_id>});
+  ```
 
 - Program Execution Trace
 
-Generating the mips arch based program execution trace:
-
-https://github.com/zkMIPS/cannon-mips/tree/mipsevm-minigeth-trace#readme
+​		Generating the program execution trace by [cannon-mips](https://github.com/zkMIPS/cannon-mips/tree/mipsevm-minigeth-trace#readme)
 
 - Compile MIPS VM circuit using Zokrates 
 
-1.curl -LSfs get.zokrat.es | sh
-
-2.cd mips_circuit/core/lib/circuit
-
-3.zokrates compile -i mips_vm_poseidon.zok
+  ```
+  $ cd core/lib/circuit
+  $ zokrates compile -i mips_vm_poseidon.zok
+  $ zokrates setup
+  ```
 
 ## Deploy Verifier Contract
-The compiled verifier contract is at /mips_circuit/contract/verifier/g16/verifier.
-Users can use the program at /mips_circuit/contract/bin/deploy/contract/src/main.rs or other tools to deploy the contract.
-Remember to replace the chain_url to your dest_chain in the 'deploy' function.
 
+The compiled verifier contract is at contract/verifier/g16/verifier.
+Users can use the program at contract/bin/deploy/contract/src/main.rs or other tools to deploy the contract.
+Remember to replace the chain_url to your dest_chain in the 'deploy' function.
 
 ## Witness Generator
 
-1.Setting the environment variables:
+1. Setting the environment variables:
 
-DATABASE_URL=postgresql://<user>:<password>@<ip>:<port>/<db>  
-DATABASE_POOL_SIZE=10  
-API_PROVER_PORT=8088  
-API_PROVER_URL=http://127.0.0.1:8088  
-API_PROVER_SECRET_AUTH=sample  
-PROVER_PROVER_HEARTBEAT_INTERVAL=1000  
-PROVER_PROVER_CYCLE_WAIT=500  
-PROVER_PROVER_REQUEST_TIMEOUT=10  
-PROVER_PROVER_DIE_AFTER_PROOF=false  
-PROVER_CORE_GONE_TIMEOUT=60000  
-PROVER_CORE_IDLE_PROVERS=1  
-PROVER_WITNESS_GENERATOR_PREPARE_DATA_INTERVAL=500  
-PROVER_WITNESS_GENERATOR_WITNESS_GENERATORS=2  
-CIRCUIT_FILE_PATH=/core/lib/circuit/out # generated by zokrates compile -i mips_vm_poseidon.zok  
-CIRCUIT_ABI_FILE_PATH=/mips_circuit/core/lib/circuit/abi.json # generated by zokrates compile -i mips_vm_poseidon.zok  
-RUST_LOG=warn  
-VERIFIER_CHAIN_URL=http://127.0.0.1:8545 # chain url where the verifier contract deployed    
-VERIFIER_CONTRACT_ADDRESS=0xe691cff16ddae0f79bfd0d7850ddb0ef162a9cd3 # verifier contract address  
-VERIFIER_ACCOUNT=E2EA1B7352BaEfEba0D11A5FA614dF6cE9E77693 # account for send transactions  
-VERIFIER_ABI_PATH=/mips_circuit/contract/verifier/g16/verifier  
+   ```
+   $ source ./setenv.bash
+   ```
 
-2.Compile the witness generator
+   Or add following code to .bashrc file
 
-cd mips_circuit/core/bin/server
+   ```
+   export DATABASE_URL=postgresql://<user>:<password>@<ip>:<port>/<db>  
+   export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres
+   export DATABASE_POOL_SIZE=10
+   export API_PROVER_PORT=8088
+   export API_PROVER_URL=http://127.0.0.1:8088
+   export API_PROVER_SECRET_AUTH=sample
+   export PROVER_PROVER_HEARTBEAT_INTERVAL=1000
+   export PROVER_PROVER_CYCLE_WAIT=500
+   export PROVER_PROVER_REQUEST_TIMEOUT=10
+   export PROVER_PROVER_DIE_AFTER_PROOF=false
+   export PROVER_CORE_GONE_TIMEOUT=60000
+   export PROVER_CORE_IDLE_PROVERS=1
+   export PROVER_WITNESS_GENERATOR_PREPARE_DATA_INTERVAL=500
+   export PROVER_WITNESS_GENERATOR_WITNESS_GENERATORS=2
+   export CIRCUIT_FILE_PATH=${PWD}/core/lib/circuit/out # generated by zokrates compile -i mips_vm_poseidon.zok
+   export CIRCUIT_ABI_FILE_PATH=${PWD}/core/lib/circuit/abi.json # generated by zokrates compile -i mips_vm_poseidon.zok
+   export RUST_LOG=warn
+   export VERIFIER_CHAIN_URL=http://127.0.0.1:8545 # chain url where the verifier contract deployed
+   export VERIFIER_CONTRACT_ADDRESS=0xe691cff16ddae0f79bfd0d7850ddb0ef162a9cd3 # verifier contract address
+   export VERIFIER_ACCOUNT=E2EA1B7352BaEfEba0D11A5FA614dF6cE9E77693 # account for send transactions
+   export VERIFIER_ABI_PATH=${PWD}/contract/verifier/g16/verifier
+   export CHAIN_ETH_NETWORK=rinkeby
+   export CIRCUIT_PROVING_KEY_PATH=${PWD}/core/lib/circuit/proving.key # generated by: zokrates compile -i mips_vm_poseidon.zok
+   ```
 
-DATABASE_URL=postgresql://<user>:<password>@<ip>:<port>/<db> cargo build --release 
+2. Compile the witness generator
 
-3.Running the witness generator
+   ```
+   $ pushd core/bin/server
+   $ cargo build --release
+   $ popd
+   ```
 
-nohup ./target/release/server > server.output 2>&1 &
+3. Running the witness generator
+
+   ```
+   $ nohup ./target/release/server > server.output 2>&1 &
+   ```
 
 ## Prover
 
-1.Setting the environment variables:
+1. Setting the environment variables
 
-PROVER_PROVER_HEARTBEAT_INTERVAL=1000
-PROVER_PROVER_CYCLE_WAIT=500
-PROVER_PROVER_REQUEST_TIMEOUT=10
-PROVER_PROVER_DIE_AFTER_PROOF=false
-PROVER_CORE_GONE_TIMEOUT=60000
-PROVER_CORE_IDLE_PROVERS=1
-PROVER_WITNESS_GENERATOR_PREPARE_DATA_INTERVAL=500
-PROVER_WITNESS_GENERATOR_WITNESS_GENERATORS=2
-DATABASE_URL=postgresql://<user>:<password>@<ip>:<port>/<db>
-DATABASE_POOL_SIZE=10
-RUST_LOG=info
-CHAIN_ETH_NETWORK=rinkeby
-CIRCUIT_FILE_PATH=/mips_circuit/core/lib/circuit/out # generated by: zokrates compile -i mips_vm_poseidon.zok
-CIRCUIT_PROVING_KEY_PATH=/mips_circuit/core/lib/circuit/proving.key # generated by: zokrates compile -i mips_vm_poseidon.zok
+   ```
+   $ source ./setenv.bash
+   ```
 
 2. Compile the prover 
 
-cd mips_circuit/core/bin/prover
+   ```
+   $ pushd core/bin/prover
+   $ cargo build --release
+   $ popd
+   ```
 
-DATABASE_URL=postgresql://<user>:<password>@<ip>:<port>/<db> cargo build --release
+3. Running the prover
 
-3.Running the prover
+   ```
+   $ nohup ./target/release/prover > prover.output 2>&1 &
+   ```
 
-nohup ./target/release/prover > prover.output 2>&1 &
+   
