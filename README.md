@@ -12,6 +12,16 @@ https://www.rust-lang.org/tools/install
 
 - Postgres DB
 
+1. Install postgres
+
+https://www.postgresql.org/download/
+
+2. Install pgadmin(optional) 
+
+Using the pgadmin GUI,it could manage the database visual graphically and easily.
+
+https://www.pgadmin.org/download/
+
 ```
 DROP TABLE IF EXISTS t_block_witness_cloud;
 CREATE TABLE t_block_witness_cloud
