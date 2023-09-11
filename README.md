@@ -94,7 +94,7 @@ Remember to replace the chain_url to your dest_chain in the 'deploy' function.
 
 1.Setting the environment variables:
 
-DATABASE_URL=postgresql://postgres:db@ip:port/table  
+DATABASE_URL=postgresql://<user>:<password>@<ip>:<port>/<db>  
 DATABASE_POOL_SIZE=10  
 API_PROVER_PORT=8088  
 API_PROVER_URL=http://127.0.0.1:8088  
@@ -119,7 +119,7 @@ VERIFIER_ABI_PATH=/mips_circuit/contract/verifier/g16/verifier
 
 cd mips_circuit/core/bin/server
 
-DATABASE_URL=postgresql://postgres:db@ip:port/table cargo build --release 
+DATABASE_URL=postgresql://<user>:<password>@<ip>:<port>/<db> cargo build --release 
 
 3.Running the witness generator
 
@@ -137,7 +137,7 @@ PROVER_CORE_GONE_TIMEOUT=60000
 PROVER_CORE_IDLE_PROVERS=1
 PROVER_WITNESS_GENERATOR_PREPARE_DATA_INTERVAL=500
 PROVER_WITNESS_GENERATOR_WITNESS_GENERATORS=2
-DATABASE_URL=postgresql://postgres:<db>@<ip>:<port>/<table>
+DATABASE_URL=postgresql://<user>:<password>@<ip>:<port>/<db>
 DATABASE_POOL_SIZE=10
 RUST_LOG=info
 CHAIN_ETH_NETWORK=rinkeby
@@ -148,7 +148,7 @@ CIRCUIT_PROVING_KEY_PATH=/mips_circuit/core/lib/circuit/proving.key # generated 
 
 cd mips_circuit/core/bin/prover
 
-DATABASE_URL=postgresql://postgres:db@ip:port/table cargo build --release
+DATABASE_URL=postgresql://<user>:<password>@<ip>:<port>/<db> cargo build --release
 
 3.Running the prover
 
