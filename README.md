@@ -1,7 +1,9 @@
 # Mips Circuit
 
-Mips Circuit is a crypto circuit lib for Zero-Knowledge(ZK) VM based on MIPS Architecture. 
 
+This is a proof of concept (PoC) for zkmips implemented using the Cannon simulator, Zokrates DSL, and Groth16. It supports the full execution of Minigeth, outputs the entire instruction sequence, generates proofs for each instruction, and submits them to an on-chain contract for verification.
+
+Unlike other zkVM projects, we didn't rush to define the proof system we needed initially. Instead, through this PoC, we aimed to understand the scale and challenges of the proofs required for using zkmips as a zk virtual machine for general computation. Now that this PoC is ready, we plan to release a testnet version based on an entirely new proof system in six months.
 ## Prequistise
 
 - Postgres DB
