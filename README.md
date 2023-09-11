@@ -6,6 +6,10 @@ This is a proof of concept (PoC) for zkmips implemented using the Cannon simulat
 Unlike other zkVM projects, we didn't rush to define the proof system we needed initially. Instead, through this PoC, we aimed to understand the scale and challenges of the proofs required for using zkmips as a zk virtual machine for general computation. Now that this PoC is ready, we plan to release a testnet version based on an entirely new proof system in six months.
 ## Prequistise
 
+- Install Rust
+
+https://www.rust-lang.org/tools/install
+
 - Postgres DB
 
 ```
