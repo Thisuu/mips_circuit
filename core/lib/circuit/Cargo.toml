@@ -33,6 +33,11 @@ vlog = { path = "../vlog", version = "1.0" }
 rand_0_4 = { version = "0.4", package = "rand" }
 rand_0_8 = { version = "0.8", package = "rand" }
 hex = "0.4.2"
+web3 = "0.16.0"
+ethabi = "17.0.0"
+primitive-types = { version = "0.11", features = ["rlp"] }
+
+
 
 # Backends
 zokrates_proof_systems = { version = "0.1", path = "../../../zokrates_proof_systems", default-features = false }
@@ -48,6 +53,7 @@ ethabi = "17.0.0"
 primitive-types = { version = "0.11", features = ["rlp"] }
 fs_extra = "1.1.0"
 pretty_assertions = "1.2.1"
+
 
 [build-dependencies]
 fs_extra = "1.1.0"

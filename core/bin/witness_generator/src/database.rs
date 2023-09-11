@@ -68,6 +68,29 @@ impl DatabaseInterface for Database {
         Ok(number)
     }
 
+    async fn load_last_verified_proof_block_number(
+        &self,
+        connection: &mut StorageProcessor<'_>,
+    ) -> anyhow::Result<i64> {
+        let number = connection.prover_schema().load_last_verified_proof_block_number().await?;
+
+        Ok(number)
+    }
+
+    async fn update_last_verified_proof_block_number(
+        &self,
+        connection: &mut StorageProcessor<'_>,
+        block_number: BlockNumber,
+    ) -> anyhow::Result<()> {
+        connection
+            .prover_schema()
+            .update_last_verified_proof_block_number(block_number)
+            .await?;
+
+        Ok(())
+    }
+
+
     async fn update_last_witness_block_number(
         &self,
         connection: &mut StorageProcessor<'_>,

@@ -22,6 +22,7 @@ pub mod gateway_watcher;
 pub mod misc;
 pub mod oracle_price;
 pub mod prover;
+pub mod verifier;
 pub mod ticker;
 pub mod token_handler;
 pub mod user_registration;
