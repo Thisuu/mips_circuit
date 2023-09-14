@@ -1255,6 +1255,7 @@ dependencies = [
  "primitive-types 0.11.1",
  "rand 0.4.6",
  "rand 0.8.5",
+ "secp256k1",
  "serde_json",
  "tempdir",
  "typed-arena",

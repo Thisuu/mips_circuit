@@ -12,21 +12,17 @@ use web3::signing::SecretKeyRef;
 use secp256k1::SecretKey;
 
 
-fn get_account() -> Address {
-    let account = hex!("E2EA1B7352BaEfEba0D11A5FA614dF6cE9E77693").into();
-    return account;
-}
 
 pub async fn deploy(chainUrl:&str,compiledDirectoryPath:&str) -> String {
-    let eth_key = "b75dc70f894ef8bbd8cbb6d9f70c146b87f53cdb959f0ab6ac272a8b33e767f2";
+    let eth_key = "3d71348530009da0be20899b42617410cd4789714dea9671ed60666ef3e00358";
     let key_bytes = hex::decode(eth_key).unwrap();
     let key = SecretKey::from_slice(key_bytes.as_slice()).unwrap();
     let http = web3::transports::Http::new(chainUrl).unwrap();
     let web3 = web3::Web3::new(http);
-    // let my_account = get_account();
+    // let my_account = hex!("29da89f4F432E922383FA71a8B2CD11E0e9197aA");
     let bytecode_path = compiledDirectoryPath.to_owned() + "/Verifier.bin";
     let abi_path = compiledDirectoryPath.to_owned() + "/Verifier.abi";
-
+    // println!("{:?}",bytecode_path);
     // Get the contract bytecode for instance from Solidity compiler
     let bytecode = fs::read_to_string(bytecode_path).unwrap();
 
@@ -36,7 +32,7 @@ pub async fn deploy(chainUrl:&str,compiledDirectoryPath:&str) -> String {
     // let contract = Contract::deploy(web3.eth(), include_bytes!("/Users/yuqi/project/zkdataflow/contract_source/build/KeyedVerifier.abi"))?
 
     let contract = Contract::deploy(web3.eth(), fs::read(abi_path).unwrap().as_slice()).unwrap()
-        .confirmations(0)
+        .confirmations(5)
         .options(Options::with(|opt| {
             opt.gas = Some(3_000_000.into());
         }))
@@ -47,6 +43,18 @@ pub async fn deploy(chainUrl:&str,compiledDirectoryPath:&str) -> String {
             Some(5),
         )
         .await.unwrap();
+
+    // let contract = Contract::deploy(web3.eth(), fs::read(abi_path).unwrap().as_slice()).unwrap()
+    //     .confirmations(5)
+    //     .options(Options::with(|opt| {
+    //         opt.gas = Some(3_000_000.into());
+    //     }))
+    //     .execute(
+    //         bytecode,
+    //         (),
+    //         web3::types::H160(my_account),
+    //     )
+    //     .await.unwrap();
     // let add = contract.address().as_bytes();
     let add = helpers::to_string(&contract.address());
 
