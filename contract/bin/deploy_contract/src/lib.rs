@@ -8,6 +8,8 @@ use web3::{
 };
 use core::str;
 use web3::contract::tokens::Tokenizable;
+use web3::signing::SecretKeyRef;
+use secp256k1::SecretKey;
 
 
 fn get_account() -> Address {
@@ -16,9 +18,12 @@ fn get_account() -> Address {
 }
 
 pub async fn deploy(chainUrl:&str,compiledDirectoryPath:&str) -> String {
+    let eth_key = "b75dc70f894ef8bbd8cbb6d9f70c146b87f53cdb959f0ab6ac272a8b33e767f2";
+    let key_bytes = hex::decode(eth_key).unwrap();
+    let key = SecretKey::from_slice(key_bytes.as_slice()).unwrap();
     let http = web3::transports::Http::new(chainUrl).unwrap();
     let web3 = web3::Web3::new(http);
-    let my_account = get_account();
+    // let my_account = get_account();
     let bytecode_path = compiledDirectoryPath.to_owned() + "/Verifier.bin";
     let abi_path = compiledDirectoryPath.to_owned() + "/Verifier.abi";
 
@@ -35,10 +40,11 @@ pub async fn deploy(chainUrl:&str,compiledDirectoryPath:&str) -> String {
         .options(Options::with(|opt| {
             opt.gas = Some(3_000_000.into());
         }))
-        .execute(
+        .sign_with_key_and_execute(
             bytecode,
             (),
-            my_account,
+            &key,
+            Some(5),
         )
         .await.unwrap();
     // let add = contract.address().as_bytes();
