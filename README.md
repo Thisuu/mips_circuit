@@ -28,7 +28,7 @@ Unlike other zkVM projects, we didn't rush to define the proof system we needed 
       f_trace        jsonb                    NOT NULL,
       f_created_at   TIMESTAMP with time zone NOT NULL DEFAULT now()
   );
-
+  
   DROP TABLE IF EXISTS t_block_witness_cloud;
   CREATE TABLE t_block_witness_cloud
   (
@@ -78,6 +78,8 @@ Unlike other zkVM projects, we didn't rush to define the proof system we needed 
       f_id           bigserial PRIMARY KEY,
       f_block     BIGINT                   NOT NULL
   );
+  
+  DROP TABLE IF EXISTS t_verified_proof_block_number;
   CREATE TABLE t_verified_proof_block_number
   (
       f_id           bigserial PRIMARY KEY,
@@ -100,9 +102,10 @@ Unlike other zkVM projects, we didn't rush to define the proof system we needed 
 - Compile MIPS VM circuit using Zokrates 
 
   ```
-  $ cd core/lib/circuit
+  $ pushd core/lib/circuit
   $ zokrates compile -i mips_vm_poseidon.zok
   $ zokrates setup
+  $ popd
   ```
 
 ## Deploy Verifier Contract
