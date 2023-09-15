@@ -1255,6 +1255,7 @@ dependencies = [
  "primitive-types 0.11.1",
  "rand 0.4.6",
  "rand 0.8.5",
+ "secp256k1",
  "serde_json",
  "tempdir",
  "typed-arena",
@@ -1758,7 +1759,9 @@ dependencies = [
 name = "deploy_contract"
 version = "1.0.0"
 dependencies = [
+ "hex 0.4.3",
  "hex-literal 0.3.4",
+ "secp256k1",
  "serde",
  "serde_json",
  "tokio",

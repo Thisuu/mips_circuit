@@ -32,6 +32,8 @@ use web3::types::TransactionRequest;
 use web3::types::U256;
 use to_token::ToToken;
 pub mod to_token;
+use secp256k1::SecretKey;
+
 
 
 pub fn generate_proof(args: &HashMap<String, String>) -> Result<String, String> {
@@ -160,32 +162,23 @@ pub async fn call_verify<S: SolidityCompatibleScheme<Bn128Field> + ToToken<Bn128
 
     // let inputs = ethabi::encode(&[proof_token, input_token.clone()]);
 
+    let key_bytes = hex::decode(account).unwrap();
+
+    let key = SecretKey::from_slice(key_bytes.as_slice()).unwrap();
+
+
     let http = web3::transports::Http::new(chainUrl).unwrap();
     let web3 = web3::Web3::new(http);
-    let my_account = Address::from_str(account).unwrap();
 
     let mut op = Options::default();
     op.gas = Some(3_000_000.into());
     let abi_path = abiPath.to_owned() + "/verifier.abi";
     let contract = Contract::from_json(web3.eth(),contractAddress.parse().unwrap(),fs::read(abi_path).unwrap().as_slice()).unwrap();
-    let inputs = contract.abi().function("verifyTx").unwrap().encode_input(&[proof_token, input_token.clone()]).unwrap();
 
-    let result = web3.eth().send_transaction(       TransactionRequest {
-            from:my_account,
-            to: Some(contract.address()),
-            gas:op.gas,
-            gas_price:op.gas_price,
-            value:op.value,
-            nonce:op.nonce,
-            data: Some(web3::types::Bytes(inputs)),
-            condition:op.condition,
-            transaction_type:op.transaction_type,
-            access_list:op.access_list,
-        })
-        .await.unwrap();
-
-    let transactionRes = web3.eth().transaction_receipt(result).await.unwrap().unwrap();
-    if transactionRes.status.unwrap() == U64::from(1){
+    // let inputs = contract.abi().function("verifyTx").unwrap().encode_input(&[proof_token, input_token.clone()]).unwrap();
+    let result = contract.signed_call_with_confirmations("verifyTx",vec![proof_token, input_token.clone()].as_slice(), op, 1, &key).await.unwrap();
+    if result.status.unwrap() == U64::from(1){
+        println!("verify proof success, tx hash is: {:?}",result.transaction_hash);
         return true;
     } else {
         return  false;

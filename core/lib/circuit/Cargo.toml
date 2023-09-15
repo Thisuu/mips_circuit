@@ -36,6 +36,7 @@ hex = "0.4.2"
 web3 = "0.16.0"
 ethabi = "17.0.0"
 primitive-types = { version = "0.11", features = ["rlp"] }
+secp256k1 = { version = "0.20", features = ["recovery"] }
 
 
 
