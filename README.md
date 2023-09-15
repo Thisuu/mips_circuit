@@ -4,9 +4,14 @@
 This is a proof of concept (PoC) for zkmips implemented using the Cannon simulator, Zokrates DSL, and Groth16. It supports the full execution of Minigeth, outputs the entire instruction sequence, generates proofs for each instruction, and submits them to an on-chain contract for verification.
 
 Unlike other zkVM projects, we didn't rush to define the proof system we needed initially. Instead, through this PoC, we aimed to understand the scale and challenges of the proofs required for using zkmips as a zk virtual machine for general computation. Now that this PoC is ready, we plan to release a testnet version based on an entirely new proof system in six months.
-## Prequistise
+## Prerequisite
 
 - Install [Rust](https://www.rust-lang.org/tools/install)
+
+- Install [Go](https://go.dev/doc/install)
+
+- Install Make
+
 - Install [Zokrates](https://zokrates.github.io/gettingstarted.html)
 
 - Postgres DB
@@ -16,6 +21,14 @@ Unlike other zkVM projects, we didn't rush to define the proof system we needed 
   - Create Tables:
 
   ```
+  DROP TABLE IF EXISTS f_traces;
+  CREATE TABLE f_traces
+  (
+      f_id           bigserial PRIMARY KEY,
+      f_trace        jsonb                    NOT NULL,
+      f_created_at   TIMESTAMP with time zone NOT NULL DEFAULT now()
+  );
+
   DROP TABLE IF EXISTS t_block_witness_cloud;
   CREATE TABLE t_block_witness_cloud
   (
@@ -82,7 +95,7 @@ Unlike other zkVM projects, we didn't rush to define the proof system we needed 
 
 - Program Execution Trace
 
-​		Generating the program execution trace by [cannon-mips](https://github.com/zkMIPS/cannon-mips/tree/mipsevm-minigeth-trace#readme)
+  Generating the program execution trace by [cannon-mips](https://github.com/zkMIPS/cannon-mips/tree/mipsevm-minigeth-trace#readme)
 
 - Compile MIPS VM circuit using Zokrates 
 
