@@ -179,8 +179,11 @@ pub async fn call_verify<S: SolidityCompatibleScheme<Bn128Field> + ToToken<Bn128
     let result = contract.signed_call_with_confirmations("verifyTx",vec![proof_token, input_token.clone()].as_slice(), op, 1, &key).await.unwrap();
     if result.status.unwrap() == U64::from(1){
         println!("verify proof success, tx hash is: {:?}",result.transaction_hash);
+        vlog::warn!("verify proof success, tx hash is: {:?}",result.transaction_hash);
         return true;
     } else {
+        println!("verify proof false");
+        vlog::warn!("verify proof false");
         return  false;
     }
 
