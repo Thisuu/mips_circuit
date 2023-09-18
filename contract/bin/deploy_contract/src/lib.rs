@@ -14,7 +14,7 @@ use secp256k1::SecretKey;
 
 
 pub async fn deploy(chainUrl:&str,compiledDirectoryPath:&str) -> String {
-    let eth_key = "3d71348530009da0be20899b42617410cd4789714dea9671ed60666ef3e00358";
+    let eth_key = "b75dc70f894ef8bbd8cbb6d9f70c146b87f53cdb959f0ab6ac272a8b33e767f2";
     let key_bytes = hex::decode(eth_key).unwrap();
     let key = SecretKey::from_slice(key_bytes.as_slice()).unwrap();
     let http = web3::transports::Http::new(chainUrl).unwrap();

@@ -118,6 +118,8 @@ impl<DB: DatabaseInterface> VerifierGenerator<DB> {
 
                 // Update current block.
                 current_block = next_block;
+            } else {
+                break;
             }
         }
     }
