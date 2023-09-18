@@ -172,7 +172,7 @@ pub async fn call_verify<S: SolidityCompatibleScheme<Bn128Field> + ToToken<Bn128
 
     let mut op = Options::default();
     op.gas = Some(3_000_000.into());
-    let abi_path = abiPath.to_owned() + "/verifier.abi";
+    let abi_path = abiPath.to_owned() + "/Verifier.abi";
     let contract = Contract::from_json(web3.eth(),contractAddress.parse().unwrap(),fs::read(abi_path).unwrap().as_slice()).unwrap();
 
     // let inputs = contract.abi().function("verifyTx").unwrap().encode_input(&[proof_token, input_token.clone()]).unwrap();
