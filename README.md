@@ -104,13 +104,16 @@ Unlike other zkVM projects, we didn't rush to define the proof system we needed 
   ```
   $ pushd core/lib/circuit
   $ zokrates compile -i mips_vm_poseidon.zok
-  $ zokrates setup
+  $ wget -c http://ec2-46-51-227-198.ap-northeast-1.compute.amazonaws.com/proving.key
   $ popd
   ```
 
 ## Deploy Verifier Contract
 
-We have deployed a goerli verify contract at: 0xc80242e0e7847c4bbac915002e8c294e10886554. Developers can use this to verify the proof.
+We have deployed a goerli verify contract at: 0xc80242e0e7847c4bbac915002e8c294e10886554. Developers can use this to verify the proof. 
+
+The transactions can be seen in https://goerli.etherscan.io/address/0xc80242e0e7847c4bbac915002e8c294e10886554.
+
 
 ## Witness Generator
 
