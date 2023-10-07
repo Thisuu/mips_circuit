@@ -144,6 +144,7 @@ library Pairing {
 }
 
 contract Verifier {
+    event VerifyEvent(address user);
     using Pairing for *;
     struct VerifyingKey {
         Pairing.G1Point alpha;
@@ -186,13 +187,14 @@ contract Verifier {
     }
     function verifyTx(
             Proof memory proof, uint[1] memory input
-        ) public view returns (bool r) {
+        ) public returns (bool r) {
         uint[] memory inputValues = new uint[](1);
         
         for(uint i = 0; i < input.length; i++){
             inputValues[i] = input[i];
         }
         if (verify(inputValues, proof) == 0) {
+            emit VerifyEvent(msg.sender);
             return true;
         } else {
             revert("V_F");
