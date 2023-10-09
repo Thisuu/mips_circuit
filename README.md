@@ -21,7 +21,7 @@ The demo implementation uses the Cannon simulator, Zokrates DSL, and Groth16. It
   export PATH=<path-to>/ZoKrates/target/release:$PATH
   ```
 
-  This will be used to compile the MIPS VM circuit)
+  This will be used to compile the MIPS VM circuit.
 
 - Install [postgres](https://www.postgresql.org/download/)
   - You can follow [this](https://www.youtube.com/watch?v=RdPYA-wDhTA) guide to install using Docker
