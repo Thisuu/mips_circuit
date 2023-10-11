@@ -180,7 +180,7 @@ popd
 
 ## Verification though a Smart Contract Verifier
 
-We have deployed a goerli verify contract at: [0xc80242e0e7847c4bbac915002e8c294e10886554](https://goerli.etherscan.io/address/0xc80242e0e7847c4bbac915002e8c294e10886554). You can use this to verify the proof.
+We have deployed a goerli verify contract at: [0xacd47ec395668320770e7183b9ee817f4ff8774e](https://goerli.etherscan.io/address/0xacd47ec395668320770e7183b9ee817f4ff8774e). You can use this to verify the proof.
 
 The next steps will be focused on verifying the proof on-chain
 
